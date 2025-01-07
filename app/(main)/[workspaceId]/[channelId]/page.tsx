@@ -47,7 +47,8 @@ export default async function ChannelPage({
       <ChannelHeader name={channel.name} />
       <MessageList 
         initialMessages={formattedMessages} 
-        channelId={params.channelId} 
+        channelId={params.channelId}
+        workspaceId={params.workspaceId}
       />
     </div>
   )

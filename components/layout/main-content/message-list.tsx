@@ -45,7 +45,7 @@ export default function MessageList({
     const channel = pusherClient.subscribe(channelName)
 
     // Handle new messages
-    channel.bind('new-message', (message: any) => {
+    channel.bind('new-message', (message: Message) => {
       if (!processedMessageIds.has(message.id)) {
         processedMessageIds.add(message.id)
         setMessages((current) => [...current, message])
@@ -53,7 +53,7 @@ export default function MessageList({
     })
 
     // Handle message updates (including reactions)
-    channel.bind('message-updated', (updatedMessage: any) => {
+    channel.bind('message-updated', (updatedMessage: Message) => {
       setMessages((current) =>
         current.map((message) =>
           message.id === updatedMessage.id ? updatedMessage : message
@@ -61,10 +61,20 @@ export default function MessageList({
       )
     })
 
+    // Clean up
     return () => {
       pusherClient.unsubscribe(channelName)
+      channel.unbind('new-message')
+      channel.unbind('message-updated')
     }
   }, [channelId, isDM, otherUserId, userId, workspaceId, processedMessageIds])
+
+  // Reset processed messages when switching channels/DMs
+  useEffect(() => {
+    processedMessageIds.clear()
+    initialMessages.forEach(m => processedMessageIds.add(m.id))
+    setMessages(initialMessages)
+  }, [channelId, otherUserId, initialMessages])
 
   // Scroll to bottom when messages change
   useEffect(() => {
