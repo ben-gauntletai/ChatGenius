@@ -21,15 +21,45 @@ export default function MainLayout({
   children: React.ReactNode
 }) {
   const params = useParams()
-  const [channels, setChannels] = useState<Channel[]>([])
-  const [showAddChannel, setShowAddChannel] = useState(false)
-  const [showDeleteChannel, setShowDeleteChannel] = useState(false)
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
-  const [isChannelListExpanded, setIsChannelListExpanded] = useState(true)
-  const [isLoading, setIsLoading] = useState(true)
   const pathname = usePathname()
   const router = useRouter()
   const { signOut } = useClerk()
+  const [channels, setChannels] = useState<Channel[]>([])
+  const [showAddChannel, setShowAddChannel] = useState(false)
+  const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null)
+  const [isChannelListExpanded, setIsChannelListExpanded] = useState(true)
+
+  const handleChannelAdded = async () => {
+    setShowAddChannel(false)
+    const response = await fetch(`/api/workspaces/${params.workspaceId}/channels`)
+    const data = await response.json()
+    setChannels(data)
+  }
+
+  const handleDeleteChannel = async () => {
+    if (!channelToDelete) return
+
+    try {
+      const response = await fetch(
+        `/api/workspaces/${params.workspaceId}/channels/${channelToDelete.id}`,
+        { method: 'DELETE' }
+      )
+
+      if (!response.ok) throw new Error('Failed to delete channel')
+
+      // Refresh channels list
+      const channelsResponse = await fetch(`/api/workspaces/${params.workspaceId}/channels`)
+      const data = await channelsResponse.json()
+      setChannels(data)
+
+      // If we're on the deleted channel's page, redirect to the first available channel
+      if (pathname === `/${params.workspaceId}/${channelToDelete.id}` && data.length > 0) {
+        router.push(`/${params.workspaceId}/${data[0].id}`)
+      }
+    } catch (error) {
+      console.error('Error deleting channel:', error)
+    }
+  }
 
   useEffect(() => {
     const fetchChannels = async () => {
@@ -37,10 +67,8 @@ export default function MainLayout({
         const response = await fetch(`/api/workspaces/${params.workspaceId}/channels`)
         const data = await response.json()
         setChannels(data)
-        setIsLoading(false)
       } catch (error) {
-        console.error('Failed to fetch channels:', error)
-        setIsLoading(false)
+        console.error('Error fetching channels:', error)
       }
     }
 
@@ -49,71 +77,56 @@ export default function MainLayout({
     }
   }, [params.workspaceId])
 
-  if (isLoading) {
-    return <div className="h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
-    </div>
-  }
-
   return (
-    <div className="h-screen flex">
-      <div className="bg-[#3F0E40] w-60 flex flex-col flex-shrink-0">
+    <div className="flex h-screen">
+      <div className="w-60 bg-[#3F0E40] text-white flex flex-col">
         <div className="p-4 border-b border-white/10">
           <h1 className="text-white font-bold text-lg">Your Workspace</h1>
         </div>
         
         <div className="flex-1 overflow-y-auto space-y-4 py-4">
-          <div>
-            <button 
+          <div className="px-4 mb-6">
+            <button
               onClick={() => setIsChannelListExpanded(!isChannelListExpanded)}
-              className="w-full flex items-center group px-2 py-[6px]"
+              className="flex items-center mb-2 text-gray-300 hover:text-white w-full"
             >
-              <ChevronDown className={`w-3 h-3 text-white/70 mr-1 transition-transform ${
-                isChannelListExpanded ? '' : '-rotate-90'
-              }`} />
-              <Hash className="w-4 h-4 text-white/70 mr-2" />
-              <span className="text-[15px] text-white/70">Channels</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowAddChannel(true)
-                }}
-                className="ml-auto opacity-0 group-hover:opacity-100 hover:text-white/90"
-              >
-                <Plus className="w-4 h-4 text-white/70" />
-              </button>
+              <ChevronDown className={`h-4 w-4 mr-1 transition-transform ${isChannelListExpanded ? '' : '-rotate-90'}`} />
+              <span>Channels</span>
             </button>
-
+            
             {isChannelListExpanded && (
-              <div className="mt-1 space-y-[2px]">
+              <div className="space-y-1">
                 {channels.map((channel) => (
-                  <div
+                  <Link
                     key={channel.id}
-                    className="group flex items-center px-2"
+                    href={`/${params.workspaceId}/${channel.id}`}
+                    className={`group flex items-center px-2 py-1 rounded hover:bg-[#4A154B] text-gray-300 hover:text-white ${
+                      pathname === `/${params.workspaceId}/${channel.id}` ? 'bg-[#4A154B] text-white' : ''
+                    }`}
                   >
-                    <Link
-                      href={`/${params.workspaceId}/${channel.id}`}
-                      className={`flex-1 flex items-center px-2 py-[6px] rounded hover:bg-white/10 ${
-                        pathname?.includes(channel.id) ? 'bg-white/10' : ''
-                      }`}
-                    >
-                      <Hash className="w-4 h-4 text-white/70 mr-2" />
-                      <span className="text-white/70 text-[15px]">
-                        {channel.name}
-                      </span>
-                    </Link>
+                    <div className="flex-1 flex items-center">
+                      <Hash className="h-4 w-4 mr-2" />
+                      <span>{channel.name}</span>
+                    </div>
                     <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedChannel(channel)
-                        setShowDeleteChannel(true)
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setChannelToDelete(channel);
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-white/90"
+                      className="opacity-0 group-hover:opacity-100"
                     >
-                      <Trash2 className="w-4 h-4 text-white/70" />
+                      <Trash2 className="h-4 w-4 text-gray-300 group-hover:text-white" />
                     </button>
-                  </div>
+                  </Link>
                 ))}
+                
+                <button
+                  onClick={() => setShowAddChannel(true)}
+                  className="flex items-center px-2 py-1 w-full text-gray-300 hover:text-white hover:bg-[#4A154B] rounded"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  <span>Add channels</span>
+                </button>
               </div>
             )}
           </div>
@@ -134,34 +147,23 @@ export default function MainLayout({
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
-        {children}
-      </div>
+      {children}
 
       {showAddChannel && (
         <AddChannelModal
+          isOpen={showAddChannel}
           workspaceId={params.workspaceId as string}
           onClose={() => setShowAddChannel(false)}
-          onChannelAdded={() => {
-            setShowAddChannel(false)
-            fetchChannels()
-          }}
+          onChannelCreated={handleChannelAdded}
         />
       )}
-      {showDeleteChannel && selectedChannel && (
-        <DeleteChannelModal
-          channel={selectedChannel}
-          onClose={() => {
-            setShowDeleteChannel(false)
-            setSelectedChannel(null)
-          }}
-          onChannelDeleted={() => {
-            setShowDeleteChannel(false)
-            setSelectedChannel(null)
-            fetchChannels()
-          }}
-        />
-      )}
+
+      <DeleteChannelModal
+        isOpen={!!channelToDelete}
+        channelName={channelToDelete?.name || ''}
+        onClose={() => setChannelToDelete(null)}
+        onConfirm={handleDeleteChannel}
+      />
     </div>
   )
 }

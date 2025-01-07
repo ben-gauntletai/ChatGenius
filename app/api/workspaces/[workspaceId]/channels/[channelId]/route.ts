@@ -13,26 +13,14 @@ export async function DELETE(
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    // Check if user is a member of the workspace
-    const member = await prisma.workspaceMember.findFirst({
-      where: {
-        userId,
-        workspaceId: params.workspaceId,
-      },
-    });
-
-    if (!member) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-
-    // Delete the channel and all associated messages
     await prisma.channel.delete({
       where: {
         id: params.channelId,
-      },
+        workspaceId: params.workspaceId
+      }
     });
 
-    return NextResponse.json({ success: true });
+    return new NextResponse(null, { status: 200 });
   } catch (error) {
     console.error('[CHANNEL_DELETE]', error);
     return new NextResponse('Internal Error', { status: 500 });
