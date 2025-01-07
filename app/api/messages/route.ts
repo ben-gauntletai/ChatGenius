@@ -34,6 +34,9 @@ export async function POST(req: Request) {
 
     console.log('Created message:', message) // Debug log
 
+    // Trigger Pusher event
+    await pusherServer.trigger(`channel-${channelId}`, 'new-message', message)
+
     return NextResponse.json(message)
   } catch (error) {
     console.error('[MESSAGES_POST]', error)

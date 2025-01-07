@@ -37,57 +37,46 @@ export default function MessageList({
   const [messages, setMessages] = useState(initialMessages)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [newMessage, setNewMessage] = useState('')
-  const [processedMessageIds] = useState(new Set(initialMessages.map(m => m.id)))
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  console.log('Current selectedFile:', selectedFile) // Debug log
-
+  // Add Pusher subscription
   useEffect(() => {
-    if (!userId || !workspaceId) return
+    if (!channelId) return;
 
     const channelName = isDM 
-      ? `dm-${[userId, otherUserId].sort().join('-')}`
-      : `channel-${channelId}`
+      ? `dm-${[userId, otherUserId].sort().join('-')}` 
+      : `channel-${channelId}`;
 
-    const channel = pusherClient.subscribe(channelName)
+    const channel = pusherClient.subscribe(channelName);
 
-    // Handle new messages
     channel.bind('new-message', (message: Message) => {
-      if (!processedMessageIds.has(message.id)) {
-        processedMessageIds.add(message.id)
-        setMessages((current) => [...current, message])
-      }
-    })
+      setMessages((current) => [...current, message]);
+    });
 
-    // Handle message updates (including reactions)
-    channel.bind('message-updated', (updatedMessage: Message) => {
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === updatedMessage.id ? updatedMessage : message
+    channel.bind('message-update', (updatedMessage: Message) => {
+      setMessages((current) => 
+        current.map((msg) => 
+          msg.id === updatedMessage.id ? updatedMessage : msg
         )
-      )
-    })
+      );
+    });
 
-    // Clean up
+    channel.bind('message-delete', (messageId: string) => {
+      setMessages((current) => 
+        current.filter((msg) => msg.id !== messageId)
+      );
+    });
+
     return () => {
-      pusherClient.unsubscribe(channelName)
-      channel.unbind('new-message')
-      channel.unbind('message-updated')
+      pusherClient.unsubscribe(channelName);
     }
-  }, [channelId, isDM, otherUserId, userId, workspaceId, processedMessageIds])
+  }, [channelId, isDM, userId, otherUserId]);
 
-  // Reset processed messages when switching channels/DMs
+  // Scroll to bottom when messages update
   useEffect(() => {
-    processedMessageIds.clear()
-    initialMessages.forEach(m => processedMessageIds.add(m.id))
-    setMessages(initialMessages)
-  }, [channelId, otherUserId, initialMessages])
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
