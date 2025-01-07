@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+/* Slack-like focus styles */
+input:focus {
+  box-shadow: 0 0 0 2px rgba(18, 100, 163, 0.3);
+}
+
+/* Message hover effect */
+.message-hover:hover {
+  background-color: rgba(248, 248, 248, 1);
+}
