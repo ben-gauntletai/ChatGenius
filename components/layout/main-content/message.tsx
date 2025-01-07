@@ -168,16 +168,14 @@ export default function Message({
   const FileAttachment = ({ fileName, fileUrl }: { fileName: string, fileUrl: string }) => {
     const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName.toLowerCase())
     
-    console.log('FileAttachment render:', { fileName, fileUrl, isImage })
-    
     if (isImage) {
       return (
         <div className="mt-2 max-w-sm">
-          <div className="relative w-full h-[200px] bg-gray-100 rounded-md">
+          <div className="relative bg-gray-50 rounded-md overflow-hidden">
             <img
               src={fileUrl}
               alt={fileName}
-              className="rounded-md object-contain w-full h-full"
+              className="rounded-md object-contain w-full max-h-[150px]"
             />
           </div>
           <a 
