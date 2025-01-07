@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
-import { Pencil, Trash2, X, Check, Smile, SmilePlus } from 'lucide-react'
+import { Pencil, Trash2, X, Check, Smile, SmilePlus, PaperclipIcon } from 'lucide-react'
 import { useAuth } from '@clerk/nextjs'
 import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
@@ -16,9 +16,13 @@ interface MessageProps {
   userId: string
   channelId?: string
   reactions: any[]
+  fileUrl?: string
+  fileName?: string
+  fileType?: string
   onDelete: (messageId: string) => void
   onEdit: (messageId: string, newContent: string) => void
   onReact: (messageId: string, emoji: string) => void
+  onRemoveReaction: (messageId: string, reactionId: string) => void
 }
 
 export default function Message({ 
@@ -30,9 +34,13 @@ export default function Message({
   userId,
   channelId,
   reactions = [],
+  fileUrl,
+  fileName,
+  fileType,
   onDelete,
   onEdit,
-  onReact
+  onReact,
+  onRemoveReaction
 }: MessageProps) {
   const { userId: currentUserId } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
@@ -52,26 +60,22 @@ export default function Message({
     const buttonRect = emojiButtonRef.current.getBoundingClientRect();
     const windowHeight = window.innerHeight;
     const windowWidth = window.innerWidth;
-    const pickerHeight = 400; // Approximate height of the emoji picker
-    const pickerWidth = 350;  // Approximate width of the emoji picker
+    const pickerHeight = 400;
+    const pickerWidth = 350;
 
-    // Calculate initial position
     let top = buttonRect.bottom + window.scrollY;
     let left = buttonRect.left + window.scrollX - pickerWidth;
 
-    // Check if picker would go below viewport
     if (buttonRect.bottom + pickerHeight > windowHeight) {
       top = buttonRect.top + window.scrollY - pickerHeight;
     }
 
-    // Check if picker would go off left side
     if (left < 0) {
       left = buttonRect.right + window.scrollX;
     }
 
-    // Check if picker would go off right side
     if (left + pickerWidth > windowWidth) {
-      left = windowWidth - pickerWidth - 20; // 20px padding from window edge
+      left = windowWidth - pickerWidth - 20;
     }
 
     setPickerPosition({ top, left });
@@ -151,7 +155,6 @@ export default function Message({
     const buttonElement = emojiButtonRef.current;
     const relatedTarget = e.relatedTarget as Node;
 
-    // Check if mouse didn't move to either the picker or the button
     if (
       pickerElement && 
       buttonElement && 
@@ -162,29 +165,96 @@ export default function Message({
     }
   };
 
+  const FileAttachment = ({ fileName, fileUrl }: { fileName: string, fileUrl: string }) => {
+    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName.toLowerCase())
+    
+    if (isImage) {
+      return (
+        <div className="mt-2 max-w-sm">
+          <div className="relative w-full h-[200px]">
+            <Image
+              src={fileUrl}
+              alt={fileName}
+              fill
+              className="rounded-md object-contain"
+            />
+          </div>
+          <a 
+            href={fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-500 hover:underline"
+          >
+            {fileName}
+          </a>
+        </div>
+      )
+    }
+
+    return (
+      <div className="mt-2">
+        <a
+          href={fileUrl}
+          download={fileName}
+          className="flex items-center gap-2 p-2 bg-gray-50 rounded-md hover:bg-gray-100 max-w-sm"
+        >
+          <PaperclipIcon className="w-4 h-4 text-gray-500" />
+          <span className="text-sm text-blue-500">{fileName}</span>
+        </a>
+      </div>
+    )
+  }
+
   return (
     <div 
-      className="group px-6 py-2 hover:bg-gray-50 flex gap-4 relative"
+      className="group relative px-4 py-2 hover:bg-gray-50 flex gap-4"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="flex-shrink-0 w-9 h-9">
+      <div className="relative w-10 h-10 flex-shrink-0">
         <Image
           src={userImage}
           alt={userName}
-          width={36}
-          height={36}
-          className="rounded-sm object-cover"
+          fill
+          className="rounded-md object-cover"
         />
       </div>
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-bold text-[15px]">{userName}</span>
+          <span className="font-medium">{userName}</span>
           <span className="text-xs text-gray-500">
             {getTimeAgo(createdAt)}
           </span>
+          {isHovered && !isEditing && (
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                ref={emojiButtonRef}
+                onClick={handleEmojiButtonClick}
+                onMouseLeave={handleMouseLeave}
+                className="p-1 text-gray-600 hover:text-gray-700"
+              >
+                <SmilePlus className="w-4 h-4" />
+              </button>
+              {isOwner && (
+                <>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="p-1 text-gray-600 hover:text-gray-700"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDelete(id)}
+                    className="p-1 text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
-        
+
         {isEditing ? (
           <div className="flex items-center gap-2 mt-1">
             <input
@@ -215,6 +285,10 @@ export default function Message({
           <>
             <p className="text-[15px] text-gray-900">{content}</p>
             
+            {fileUrl && (
+              <FileAttachment fileName={fileName!} fileUrl={fileUrl} />
+            )}
+            
             {/* Reactions */}
             <div className="flex flex-wrap gap-1 mt-1">
               {Object.entries(groupedReactions).map(([emoji, reactions]) => (
@@ -238,35 +312,6 @@ export default function Message({
           </>
         )}
       </div>
-
-      {isHovered && !isEditing && (
-        <div className="absolute right-4 top-2 flex items-center gap-2 bg-white shadow-sm border rounded-md px-1">
-          <button
-            ref={emojiButtonRef}
-            onClick={handleEmojiButtonClick}
-            onMouseLeave={handleMouseLeave}
-            className="p-1 text-gray-600 hover:text-gray-700"
-          >
-            <SmilePlus className="w-4 h-4" />
-          </button>
-          {isOwner && (
-            <>
-              <button
-                onClick={() => setIsEditing(true)}
-                className="p-1 text-gray-600 hover:text-gray-700"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => onDelete(id)}
-                className="p-1 text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </>
-          )}
-        </div>
-      )}
 
       {showEmojiPicker && (
         <div 

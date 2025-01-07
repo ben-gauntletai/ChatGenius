@@ -51,6 +51,9 @@ model Channel {
 model Message {
   id        String     @id @default(cuid())
   content   String
+  fileUrl   String?
+  fileName  String?
+  fileType  String?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   userId    String

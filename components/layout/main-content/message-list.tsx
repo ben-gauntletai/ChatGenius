@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { pusherClient } from '@/lib/pusher'
 import Message from './message'
+import { PaperclipIcon, X } from 'lucide-react'
 
 interface Message {
   id: string
@@ -14,6 +15,9 @@ interface Message {
   userImage: string
   channelId?: string
   reactions: any[]
+  fileUrl?: string
+  fileName?: string
+  fileType?: string
 }
 
 export default function MessageList({ 
@@ -34,6 +38,10 @@ export default function MessageList({
   const bottomRef = useRef<HTMLDivElement>(null)
   const [newMessage, setNewMessage] = useState('')
   const [processedMessageIds] = useState(new Set(initialMessages.map(m => m.id)))
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  console.log('Current selectedFile:', selectedFile) // Debug log
 
   useEffect(() => {
     if (!userId || !workspaceId) return
@@ -83,13 +91,52 @@ export default function MessageList({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newMessage.trim()) return
+    console.log('Submit triggered, selectedFile:', selectedFile)  // Debug log
+    if (!newMessage.trim() && !selectedFile) return
 
     try {
+      let fileData = null
+      
+      if (selectedFile) {
+        console.log('Preparing to upload file:', selectedFile)  // Debug log
+        const formData = new FormData()
+        formData.append('file', selectedFile)
+        
+        console.log('Sending upload request...')  // Debug log
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        })
+        
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text()
+          console.error('Upload failed:', errorText)  // Debug log
+          throw new Error(`Failed to upload file: ${errorText}`)
+        }
+        
+        fileData = await uploadResponse.json()
+        console.log('Upload successful:', fileData)  // Debug log
+      }
+
       const endpoint = isDM ? '/api/direct-messages' : '/api/messages'
       const body = isDM 
-        ? { content: newMessage, receiverId: otherUserId, workspaceId }
-        : { content: newMessage, channelId }
+        ? { 
+            content: newMessage, 
+            receiverId: otherUserId,
+            workspaceId,
+            fileUrl: fileData?.url,
+            fileName: fileData?.name,
+            fileType: fileData?.type,
+          }
+        : { 
+            content: newMessage, 
+            channelId,
+            fileUrl: fileData?.url,
+            fileName: fileData?.name,
+            fileType: fileData?.type,
+          }
+
+      console.log('Sending message with body:', body);
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -102,6 +149,7 @@ export default function MessageList({
       }
 
       setNewMessage('')
+      setSelectedFile(null)
     } catch (error) {
       console.error('Error sending message:', error)
     }
@@ -219,6 +267,10 @@ export default function MessageList({
     }
   }
 
+  const handleFileButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <div className="flex-1 flex flex-col">
       <div className="flex-1 flex flex-col justify-end">
@@ -234,9 +286,13 @@ export default function MessageList({
               userId={message.userId}
               channelId={channelId!}
               reactions={message.reactions}
+              fileUrl={message.fileUrl}
+              fileName={message.fileName}
+              fileType={message.fileType}
               onDelete={handleDelete}
               onEdit={handleEdit}
               onReact={handleReact}
+              onRemoveReaction={handleRemoveReaction}
             />
           ))}
           <div ref={bottomRef} />
@@ -244,13 +300,71 @@ export default function MessageList({
       </div>
 
       <form onSubmit={handleSubmit} className="p-4 border-t">
-        <input
-          type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type a message..."
-          className="w-full px-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-[#3F0E40]"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Type a message..."
+            className="flex-1 px-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-[#3F0E40]"
+          />
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                console.log('File selected in onChange:', file);
+                setSelectedFile(file);
+                // Reset the input value to allow the same file to be selected again
+                e.target.value = '';
+              }
+            }}
+            accept="image/*,.pdf,.doc,.docx,.txt"
+            className="hidden"
+            onClick={(e) => {
+              // Reset the value when clicking to ensure the same file can be selected
+              (e.target as HTMLInputElement).value = '';
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              console.log('File button clicked'); // Debug log
+              fileInputRef.current?.click();
+            }}
+            className="p-2 hover:bg-gray-100 rounded-md"
+          >
+            <PaperclipIcon className="w-5 h-5 text-gray-500" />
+          </button>
+          <button 
+            type="submit"
+            className="px-4 py-2 bg-[#3F0E40] text-white rounded-md hover:bg-[#2F0B30]"
+          >
+            Send
+          </button>
+        </div>
+
+        {selectedFile && (
+          <div className="mt-2 flex items-center gap-2 bg-gray-50 p-2 rounded-md">
+            <span className="text-sm text-gray-600">
+              Selected file: {selectedFile.name}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                console.log('Clear file button clicked'); // Debug log
+                setSelectedFile(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
+              }}
+              className="text-red-500 hover:text-red-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </form>
     </div>
   )

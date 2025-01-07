@@ -7,13 +7,19 @@ export async function POST(req: Request) {
   try {
     const { userId } = auth()
     const user = await currentUser()
-    const { content, receiverId, workspaceId } = await req.json()
+    const { content, receiverId, workspaceId, fileUrl, fileName, fileType } = await req.json()
 
     if (!userId || !user) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // Get receiver's details from workspace members
+    // Validate workspaceId
+    if (!workspaceId) {
+      console.log('Missing workspaceId:', { content, receiverId, workspaceId });
+      return new NextResponse('WorkspaceId is required', { status: 400 })
+    }
+
+    // Get receiver details
     const receiver = await prisma.workspaceMember.findFirst({
       where: {
         userId: receiverId,
@@ -25,17 +31,19 @@ export async function POST(req: Request) {
       return new NextResponse('Receiver not found', { status: 404 })
     }
 
-    // Create the message with both sender and receiver information
     const message = await prisma.directMessage.create({
       data: {
         content,
-        workspaceId,
+        fileUrl,
+        fileName,
+        fileType,
         senderId: userId,
         senderName: `${user.firstName} ${user.lastName}`,
         senderImage: user.imageUrl,
         receiverId: receiver.userId,
         receiverName: receiver.userName,
-        receiverImage: receiver.userImage
+        receiverImage: receiver.userImage,
+        workspaceId: workspaceId
       },
       include: {
         reactions: true
@@ -50,6 +58,9 @@ export async function POST(req: Request) {
       userId: message.senderId,
       userName: message.senderName,
       userImage: message.senderImage,
+      fileUrl: message.fileUrl,
+      fileName: message.fileName,
+      fileType: message.fileType,
       reactions: message.reactions
     }
 
