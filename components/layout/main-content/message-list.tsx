@@ -19,31 +19,52 @@ interface Message {
 export default function MessageList({ 
   initialMessages = [],
   channelId,
-  isDM = false,
-  otherUserId,
   workspaceId
 }: { 
   initialMessages: Message[]
   channelId?: string
-  isDM?: boolean
-  otherUserId?: string
   workspaceId?: string
 }) {
   const { userId } = useAuth()
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [newMessage, setNewMessage] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
-  const hasInitializedRef = useRef(false)
+
+  // Subscribe to Pusher channel when component mounts or channelId changes
+  useEffect(() => {
+    if (!channelId) return
+
+    // Subscribe to the channel
+    const channelName = `channel-${channelId}`
+    const channel = pusherClient.subscribe(channelName)
+
+    // Handle new messages
+    const handleNewMessage = (message: Message) => {
+      setMessages((current) => [...current, message])
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+
+    // Bind to the new-message event
+    channel.bind('new-message', handleNewMessage)
+
+    // Cleanup on unmount or when channelId changes
+    return () => {
+      channel.unbind('new-message', handleNewMessage)
+      pusherClient.unsubscribe(channelName)
+    }
+  }, [channelId])
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim()) return
 
     try {
-      const endpoint = isDM 
-        ? `/api/workspaces/${workspaceId}/direct-messages`
-        : `/api/workspaces/${workspaceId}/channels/${channelId}/messages`
-
+      const endpoint = `/api/messages`
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -51,7 +72,7 @@ export default function MessageList({
         },
         body: JSON.stringify({
           content: newMessage,
-          receiverId: otherUserId
+          channelId: channelId
         }),
       })
 
@@ -67,8 +88,7 @@ export default function MessageList({
 
   const handleDelete = async (messageId: string) => {
     try {
-      const endpoint = isDM ? `/api/direct-messages/${messageId}` : `/api/messages/${messageId}`
-      const response = await fetch(endpoint, {
+      const response = await fetch(`/api/messages/${messageId}`, {
         method: 'DELETE',
       })
 
@@ -86,8 +106,7 @@ export default function MessageList({
 
   const handleEdit = async (messageId: string, newContent: string) => {
     try {
-      const endpoint = isDM ? `/api/direct-messages/${messageId}` : `/api/messages/${messageId}`
-      const response = await fetch(endpoint, {
+      const response = await fetch(`/api/messages/${messageId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -113,9 +132,7 @@ export default function MessageList({
 
   const handleReact = async (messageId: string, emoji: string) => {
     try {
-      const endpoint = isDM 
-        ? `/api/direct-messages/${messageId}/reactions`
-        : `/api/messages/${messageId}/reactions`
+      const endpoint = `/api/messages/${messageId}/reactions`
       
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -145,9 +162,7 @@ export default function MessageList({
 
   const handleRemoveReaction = async (messageId: string, reactionId: string) => {
     try {
-      const endpoint = isDM 
-        ? `/api/direct-messages/${messageId}/reactions/${reactionId}`
-        : `/api/messages/${messageId}/reactions/${reactionId}`;
+      const endpoint = `/api/messages/${messageId}/reactions/${reactionId}`;
       
       const response = await fetch(endpoint, {
         method: 'DELETE',
@@ -170,28 +185,6 @@ export default function MessageList({
       console.error('Failed to remove reaction:', error);
     }
   };
-
-  useEffect(() => {
-    if (!userId) return
-
-    const channelName = isDM
-      ? `private-dm-${workspaceId}-${[userId, otherUserId].sort().join('-')}`
-      : `presence-channel-${channelId}`
-
-    pusherClient.subscribe(channelName)
-
-    const messageHandler = (message: Message) => {
-      setMessages((current) => [...current, message])
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-
-    pusherClient.bind('incoming-message', messageHandler)
-
-    return () => {
-      pusherClient.unsubscribe(channelName)
-      pusherClient.unbind('incoming-message', messageHandler)
-    }
-  }, [channelId, isDM, otherUserId, userId, workspaceId])
 
   return (
     <div className="flex-1 flex flex-col">

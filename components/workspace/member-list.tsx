@@ -16,8 +16,6 @@ interface Member {
 
 export default function MemberList({ workspaceId }: { workspaceId: string }) {
   const { userId } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
   const [members, setMembers] = useState<Member[]>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,10 +55,6 @@ export default function MemberList({ workspaceId }: { workspaceId: string }) {
     if (b.userId === userId) return 1;
     return a.userName.localeCompare(b.userName);
   });
-
-  const handleDirectMessage = (memberId: string) => {
-    router.push(`/${workspaceId}/dm/${memberId}`);
-  };
 
   return (
     <div className="px-2">
@@ -103,18 +97,6 @@ export default function MemberList({ workspaceId }: { workspaceId: string }) {
                     <span className="ml-1 text-xs text-white/50">(admin)</span>
                   )}
                 </span>
-                {member.userId !== userId && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleDirectMessage(member.userId);
-                    }}
-                    className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <MessageSquare className="w-4 h-4 text-white/70 hover:text-white" />
-                  </button>
-                )}
               </div>
             ))
           )}

@@ -70,33 +70,6 @@ enum Role {
   MEMBER
 }
 
-model DirectMessage {
-  id        String   @id @default(cuid())
-  content   String
-  createdAt DateTime @default(now())
-  
-  senderId    String
-  senderName  String
-  senderImage String
-  
-  receiverId    String
-  receiverName  String
-  receiverImage String
-
-  reactions DirectMessageReaction[]
-}
-
-model DirectMessageReaction {
-  id        String        @id @default(cuid())
-  emoji     String
-  userId    String
-  userName  String
-  messageId String
-  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, messageId, emoji])
-}
-
 model Conversation {
   id        String   @id @default(cuid())
   user1Id   String

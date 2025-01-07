@@ -2,27 +2,20 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
-import { formatDistanceToNow } from 'date-fns'
-import { Pencil, Trash2, X, Check, Smile } from 'lucide-react'
+import { Pencil, Trash2, X, Check, Smile, SmilePlus } from 'lucide-react'
 import { useAuth } from '@clerk/nextjs'
 import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
-
-interface Reaction {
-  emoji: string
-  userId: string
-  userName: string
-}
 
 interface MessageProps {
   id: string
   content: string
   userName: string
   userImage: string
-  createdAt: Date
+  createdAt: Date | string
   userId: string
-  channelId: string
-  reactions: Reaction[]
+  channelId?: string
+  reactions: any[]
   onDelete: (messageId: string) => void
   onEdit: (messageId: string, newContent: string) => void
   onReact: (messageId: string, emoji: string) => void
@@ -46,102 +39,149 @@ export default function Message({
   const [editedContent, setEditedContent] = useState(content)
   const [isHovered, setIsHovered] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 })
+  
   const emojiButtonRef = useRef<HTMLButtonElement>(null)
   const emojiPickerRef = useRef<HTMLDivElement>(null)
-  const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('bottom')
 
   const isOwner = currentUserId === userId
 
-  // Group reactions by emoji
-  const groupedReactions = reactions.reduce((acc, reaction) => {
-    if (!acc[reaction.emoji]) {
-      acc[reaction.emoji] = []
-    }
-    acc[reaction.emoji].push(reaction)
-    return acc
-  }, {} as Record<string, Reaction[]>)
+  const handleEmojiButtonClick = () => {
+    if (!emojiButtonRef.current) return;
+    
+    const buttonRect = emojiButtonRef.current.getBoundingClientRect();
+    const windowHeight = window.innerHeight;
+    const windowWidth = window.innerWidth;
+    const pickerHeight = 400; // Approximate height of the emoji picker
+    const pickerWidth = 350;  // Approximate width of the emoji picker
 
+    // Calculate initial position
+    let top = buttonRect.bottom + window.scrollY;
+    let left = buttonRect.left + window.scrollX - pickerWidth;
+
+    // Check if picker would go below viewport
+    if (buttonRect.bottom + pickerHeight > windowHeight) {
+      top = buttonRect.top + window.scrollY - pickerHeight;
+    }
+
+    // Check if picker would go off left side
+    if (left < 0) {
+      left = buttonRect.right + window.scrollX;
+    }
+
+    // Check if picker would go off right side
+    if (left + pickerWidth > windowWidth) {
+      left = windowWidth - pickerWidth - 20; // 20px padding from window edge
+    }
+
+    setPickerPosition({ top, left });
+    setShowEmojiPicker(!showEmojiPicker);
+  };
+
+  // Close emoji picker when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         emojiPickerRef.current && 
         !emojiPickerRef.current.contains(event.target as Node) &&
-        !emojiButtonRef.current?.contains(event.target as Node)
+        emojiButtonRef.current &&
+        !emojiButtonRef.current.contains(event.target as Node)
       ) {
-        setShowEmojiPicker(false)
+        setShowEmojiPicker(false);
       }
-    }
+    };
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-  useEffect(() => {
-    if (!emojiButtonRef.current) return;
-
-    const calculatePosition = () => {
-      const buttonRect = emojiButtonRef.current?.getBoundingClientRect();
-      const windowHeight = window.innerHeight;
-      const spaceBelow = windowHeight - (buttonRect?.bottom || 0);
+  // Safe date formatting
+  const getTimeAgo = (date: Date | string) => {
+    try {
+      const messageDate = typeof date === 'string' ? new Date(date) : date
+      if (isNaN(messageDate.getTime())) {
+        return 'Invalid date'
+      }
       
-      // If there's less than 400px below the button, show picker above
-      setPickerPosition(spaceBelow < 400 ? 'top' : 'bottom');
-    };
-
-    calculatePosition();
-    window.addEventListener('scroll', calculatePosition);
-    window.addEventListener('resize', calculatePosition);
-
-    return () => {
-      window.removeEventListener('scroll', calculatePosition);
-      window.removeEventListener('resize', calculatePosition);
-    };
-  }, [showEmojiPicker]);
-
-  const handleEdit = () => {
-    if (editedContent.trim() === content) {
-      setIsEditing(false)
-      return
+      const now = new Date()
+      const diffInSeconds = Math.floor((now.getTime() - messageDate.getTime()) / 1000)
+      
+      if (diffInSeconds < 60) return 'just now'
+      if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`
+      if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`
+      if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`
+      return messageDate.toLocaleDateString()
+    } catch (error) {
+      console.error('Date formatting error:', error)
+      return 'Invalid date'
     }
-    
-    onEdit(id, editedContent)
-    setIsEditing(false)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  // Group reactions by emoji
+  const groupedReactions = reactions?.reduce((acc, reaction) => {
+    if (!acc[reaction.emoji]) {
+      acc[reaction.emoji] = []
+    }
+    acc[reaction.emoji].push(reaction)
+    return acc
+  }, {} as Record<string, any[]>) || {}
+
+  // Add handleKeyDown function
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleEdit()
-    }
-    if (e.key === 'Escape') {
+    } else if (e.key === 'Escape') {
       setEditedContent(content)
       setIsEditing(false)
     }
   }
 
-  const handleEmojiSelect = (emoji: any) => {
-    onReact(id, emoji.native)
-    setShowEmojiPicker(false)
+  // Add handleEdit function if not already defined
+  const handleEdit = () => {
+    if (editedContent.trim() && editedContent !== content) {
+      onEdit(id, editedContent)
+    }
+    setIsEditing(false)
   }
+
+  // Add mouseLeave handler for the emoji picker
+  const handleMouseLeave = (e: React.MouseEvent) => {
+    const pickerElement = emojiPickerRef.current;
+    const buttonElement = emojiButtonRef.current;
+    const relatedTarget = e.relatedTarget as Node;
+
+    // Check if mouse didn't move to either the picker or the button
+    if (
+      pickerElement && 
+      buttonElement && 
+      !pickerElement.contains(relatedTarget) && 
+      !buttonElement.contains(relatedTarget)
+    ) {
+      setShowEmojiPicker(false);
+    }
+  };
 
   return (
     <div 
-      className="flex items-start gap-3 px-4 py-2 hover:bg-gray-50 group relative"
+      className="group px-6 py-2 hover:bg-gray-50 flex gap-4 relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <Image
-        src={userImage}
-        alt={userName}
-        width={36}
-        height={36}
-        className="rounded mt-1"
-      />
+      <div className="flex-shrink-0 w-9 h-9">
+        <Image
+          src={userImage}
+          alt={userName}
+          width={36}
+          height={36}
+          className="rounded-sm object-cover"
+        />
+      </div>
       <div className="flex-1">
         <div className="flex items-center gap-2">
           <span className="font-bold text-[15px]">{userName}</span>
           <span className="text-xs text-gray-500">
-            {formatDistanceToNow(new Date(createdAt), { addSuffix: true })}
+            {getTimeAgo(createdAt)}
           </span>
         </div>
         
@@ -203,10 +243,11 @@ export default function Message({
         <div className="absolute right-4 top-2 flex items-center gap-2 bg-white shadow-sm border rounded-md px-1">
           <button
             ref={emojiButtonRef}
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            onClick={handleEmojiButtonClick}
+            onMouseLeave={handleMouseLeave}
             className="p-1 text-gray-600 hover:text-gray-700"
           >
-            <Smile className="w-4 h-4" />
+            <SmilePlus className="w-4 h-4" />
           </button>
           {isOwner && (
             <>
@@ -230,25 +271,23 @@ export default function Message({
       {showEmojiPicker && (
         <div 
           ref={emojiPickerRef}
+          className="fixed z-[9999]"
           style={{
-            position: 'absolute',
-            right: '1rem',
-            ...(pickerPosition === 'top' 
-              ? { bottom: '100%', marginBottom: '0.5rem' }
-              : { top: '3rem' }
-            ),
-            zIndex: 50
+            top: `${pickerPosition.top}px`,
+            left: `${pickerPosition.left}px`,
           }}
+          onMouseLeave={handleMouseLeave}
         >
-          <div className="shadow-lg rounded-lg">
+          <div className="bg-white shadow-lg rounded-lg border">
             <Picker
               data={data}
-              onEmojiSelect={handleEmojiSelect}
+              onEmojiSelect={(emoji: any) => {
+                onReact(id, emoji.native);
+                setShowEmojiPicker(false);
+              }}
               theme="light"
               previewPosition="none"
               skinTonePosition="none"
-              searchPosition="none"
-              maxFrequentRows={2}
             />
           </div>
         </div>

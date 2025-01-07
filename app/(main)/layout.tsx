@@ -145,7 +145,7 @@ export default function MainLayout({
               )}
             </div>
             
-            <DirectMessageList workspaceId={workspaceId} />
+            {/* <DirectMessageList workspaceId={workspaceId} /> */}
           </div>
 
           <div className="border-t border-white/10">
