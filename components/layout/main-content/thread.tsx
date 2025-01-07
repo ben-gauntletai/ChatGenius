@@ -243,6 +243,47 @@ export default function Thread({
     }
   }
 
+  const handleParentDelete = async (messageId: string) => {
+    try {
+      const response = await fetch(`/api/messages/${messageId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete message')
+      }
+
+      onClose()
+    } catch (error) {
+      console.error('Error deleting message:', error)
+    }
+  }
+
+  const handleParentEdit = async (messageId: string, content: string) => {
+    try {
+      const response = await fetch(`/api/messages/${messageId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to edit message')
+      }
+
+      const updatedMessage = await response.json()
+      setLocalParentMessage(current => ({
+        ...current,
+        content: updatedMessage.content,
+        isEdited: true
+      }))
+    } catch (error) {
+      console.error('Error editing message:', error)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -259,6 +300,8 @@ export default function Thread({
           {...localParentMessage}
           onReact={handleParentReact}
           onRemoveReaction={handleParentRemoveReaction}
+          onDelete={handleParentDelete}
+          onEdit={handleParentEdit}
         />
         
         <div className="ml-8 mt-4 space-y-4 border-l pl-4">

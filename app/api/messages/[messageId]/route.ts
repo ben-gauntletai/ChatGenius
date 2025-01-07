@@ -64,6 +64,11 @@ export async function DELETE(
     const message = await prisma.message.findUnique({
       where: {
         id: params.messageId
+      },
+      select: {
+        userId: true,
+        channelId: true,
+        threadId: true
       }
     })
 
@@ -71,7 +76,6 @@ export async function DELETE(
       return new NextResponse('Message not found', { status: 404 })
     }
 
-    // Only allow message owner to delete
     if (message.userId !== userId) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
@@ -82,20 +86,20 @@ export async function DELETE(
       }
     })
 
-    // Trigger delete for both channel and thread
+    // Trigger delete event for both channel and thread if applicable
     if (message.threadId) {
       await pusherServer.trigger(
         `thread-${message.threadId}`,
         'message-delete',
-        { messageId: params.messageId }
-      )
-    } else {
-      await pusherServer.trigger(
-        `channel-${message.channelId}`,
-        'message-delete',
-        { messageId: params.messageId }
+        params.messageId
       )
     }
+    
+    await pusherServer.trigger(
+      `channel-${message.channelId}`,
+      'message-delete',
+      params.messageId
+    )
 
     return new NextResponse(null, { status: 200 })
   } catch (error) {

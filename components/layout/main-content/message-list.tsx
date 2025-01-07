@@ -36,68 +36,50 @@ export default function MessageList({
   otherUserId?: string
 }) {
   const { userId } = useAuth()
-  const [messages, setMessages] = useState(initialMessages)
-  const [activeThread, setActiveThread] = useState<any>(null)
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
+  const [activeThread, setActiveThread] = useState<Message | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [newMessage, setNewMessage] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    if (isDM && !otherUserId) return;
-    if (!isDM && !channelId) return;
+    if (!channelId && !isDM) return
 
+    // Subscribe to the appropriate channel
     const channelName = isDM 
-      ? `dm-${[userId, otherUserId].sort().join('-')}` 
-      : `channel-${channelId}`;
+      ? `dm-${[otherUserId, userId].sort().join('-')}` 
+      : `channel-${channelId}`
+    
+    const channel = pusherClient.subscribe(channelName)
 
-    const channel = pusherClient.subscribe(channelName);
-
+    // Handle new messages
     channel.bind('new-message', (message: Message) => {
-      setMessages((current) => {
-        // Check if message already exists
-        if (current.some(msg => msg.id === message.id)) {
-          return current;
-        }
-        return [...current, message];
-      });
-    });
+      setMessages(current => [...current, message])
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    })
 
+    // Handle message updates
     channel.bind('message-update', (updatedMessage: Message) => {
-      setMessages((current) => 
-        current.map((msg) => 
-          msg.id === updatedMessage.id ? updatedMessage : msg
+      setMessages(current =>
+        current.map(message =>
+          message.id === updatedMessage.id ? updatedMessage : message
         )
-      );
-    });
+      )
+    })
 
+    // Handle message deletions
     channel.bind('message-delete', (messageId: string) => {
-      setMessages((current) => 
-        current.filter((msg) => msg.id !== messageId)
-      );
-    });
-
-    // Add new binding for thread updates
-    channel.bind('thread-update', ({ messageId, replyCount }: { messageId: string, replyCount: number }) => {
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === messageId
-            ? { ...message, replyCount }
-            : message
-        )
-      );
-      // Also update activeThread if it's the same message
-      setActiveThread((current: any) => 
-        current?.id === messageId
-          ? { ...current, replyCount }
-          : current
-      );
-    });
+      setMessages(current =>
+        current.filter(message => message.id !== messageId)
+      )
+    })
 
     return () => {
-      pusherClient.unsubscribe(channelName);
+      pusherClient.unsubscribe(channelName)
     }
-  }, [channelId, isDM, userId, otherUserId]);
+  }, [channelId, isDM, otherUserId])
 
   // Update messages when initialMessages changes
   useEffect(() => {
@@ -178,17 +160,22 @@ export default function MessageList({
 
   const handleDelete = async (messageId: string) => {
     try {
-      const endpoint = isDM 
+      const endpoint = isDM
         ? `/api/direct-messages/${messageId}`
         : `/api/messages/${messageId}`
 
       const response = await fetch(endpoint, {
-        method: 'DELETE',
+        method: 'DELETE'
       })
 
       if (!response.ok) {
         throw new Error('Failed to delete message')
       }
+
+      // Optimistically remove the message from the UI
+      setMessages(current =>
+        current.filter(message => message.id !== messageId)
+      )
     } catch (error) {
       console.error('Failed to delete message:', error)
     }
