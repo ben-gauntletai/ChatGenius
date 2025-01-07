@@ -138,11 +138,11 @@ export default function MainLayout({
 
         <div className="p-4 border-t border-white/10">
           <button
-            onClick={() => signOut(() => router.push('/sign-in'))}
+            onClick={() => signOut()}
             className="w-full flex items-center text-white/70 hover:text-white/90"
           >
-            <LogOut className="w-4 h-4 mr-2" />
-            <span>Sign Out</span>
+            <LogOut className="h-5 w-5 mr-2" />
+            Sign out
           </button>
         </div>
       </div>
