@@ -20,12 +20,14 @@ export default function MessageList({
   initialMessages = [],
   channelId,
   isDM = false,
-  otherUserId
+  otherUserId,
+  workspaceId
 }: { 
   initialMessages: Message[]
   channelId?: string
   isDM?: boolean
   otherUserId?: string
+  workspaceId?: string
 }) {
   const { userId } = useAuth()
   const [messages, setMessages] = useState<Message[]>(initialMessages)
@@ -38,7 +40,10 @@ export default function MessageList({
     if (!newMessage.trim()) return
 
     try {
-      const endpoint = isDM ? '/api/direct-messages' : `/api/messages`
+      const endpoint = isDM 
+        ? `/api/workspaces/${workspaceId}/direct-messages`
+        : `/api/workspaces/${workspaceId}/channels/${channelId}/messages`
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -46,7 +51,6 @@ export default function MessageList({
         },
         body: JSON.stringify({
           content: newMessage,
-          channelId: channelId,
           receiverId: otherUserId
         }),
       })
@@ -168,35 +172,26 @@ export default function MessageList({
   };
 
   useEffect(() => {
-    setMessages(initialMessages)
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    
-    if (!channelId && !isDM) return
+    if (!userId) return
 
-    if (hasInitializedRef.current) return
-    hasInitializedRef.current = true
+    const channelName = isDM
+      ? `private-dm-${workspaceId}-${[userId, otherUserId].sort().join('-')}`
+      : `presence-channel-${channelId}`
 
-    const channelName = isDM 
-      ? `dm-${[userId, otherUserId].sort().join('-')}` 
-      : `channel-${channelId}`
-    
-    const channel = pusherClient.subscribe(channelName)
-    
-    channel.bind('new-message', (newMessage: Message) => {
-      setMessages((current) => {
-        if (current.some(msg => msg.id === newMessage.id)) {
-          return current
-        }
-        return [...current, newMessage]
-      })
+    pusherClient.subscribe(channelName)
+
+    const messageHandler = (message: Message) => {
+      setMessages((current) => [...current, message])
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    })
+    }
+
+    pusherClient.bind('incoming-message', messageHandler)
 
     return () => {
-      hasInitializedRef.current = false
       pusherClient.unsubscribe(channelName)
+      pusherClient.unbind('incoming-message', messageHandler)
     }
-  }, [channelId, isDM, otherUserId, userId, initialMessages])
+  }, [channelId, isDM, otherUserId, userId, workspaceId])
 
   return (
     <div className="flex-1 flex flex-col">
