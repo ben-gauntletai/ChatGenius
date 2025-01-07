@@ -9,87 +9,83 @@ export async function POST(
 ) {
   try {
     const { userId } = auth()
-    if (!userId) {
+    const user = await currentUser()
+    const { emoji } = await req.json()
+
+    if (!userId || !user) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const user = await currentUser()
-    if (!user) {
-      return new NextResponse('User not found', { status: 404 })
-    }
-
-    const { emoji } = await req.json()
-
-    // Get the message to get its channelId
     const message = await prisma.message.findUnique({
-      where: { id: params.messageId },
-      select: { channelId: true }
+      where: { 
+        id: params.messageId 
+      },
+      include: { 
+        reactions: true 
+      }
     })
 
     if (!message) {
       return new NextResponse('Message not found', { status: 404 })
     }
 
-    // Find existing reaction
+    // Check if reaction already exists
     const existingReaction = await prisma.reaction.findFirst({
       where: {
         messageId: params.messageId,
-        userId: userId,
-        emoji: emoji
+        userId,
+        emoji
       }
     })
 
     if (existingReaction) {
-      // Delete the reaction
+      // Remove reaction if it exists
       await prisma.reaction.delete({
         where: {
           id: existingReaction.id
         }
       })
     } else {
-      // Create new reaction
+      // Add new reaction
       await prisma.reaction.create({
         data: {
           emoji,
           userId,
-          userName: user.firstName ?? 'Unknown User',
+          userName: `${user.firstName} ${user.lastName}`,
+          userImage: user.imageUrl,
           messageId: params.messageId
         }
       })
     }
 
-    // Fetch updated message with reactions
+    // Get updated message with reactions
     const updatedMessage = await prisma.message.findUnique({
       where: { 
         id: params.messageId 
       },
-      include: {
-        reactions: true
+      include: { 
+        reactions: true 
       }
     })
 
-    // Format the message to match the expected structure
-    const formattedMessage = {
-      id: updatedMessage.id,
-      content: updatedMessage.content,
-      createdAt: updatedMessage.createdAt,
-      userId: updatedMessage.userId,
-      userName: updatedMessage.userName,
-      userImage: updatedMessage.userImage,
-      channelId: updatedMessage.channelId,
-      reactions: updatedMessage.reactions
+    // Trigger update for both channel and thread
+    if (message.threadId) {
+      await pusherServer.trigger(
+        `thread-${message.threadId}`,
+        'message-update',
+        updatedMessage
+      )
+    } else {
+      await pusherServer.trigger(
+        `channel-${message.channelId}`,
+        'message-update',
+        updatedMessage
+      )
     }
 
-    // Trigger Pusher event
-    await pusherServer.trigger(
-      `channel-${message.channelId}`,
-      'message-updated',
-      formattedMessage
-    )
-
-    return NextResponse.json(formattedMessage)
+    return NextResponse.json(updatedMessage)
   } catch (error) {
-    console.error('[MESSAGE_REACTION_POST]', error)
+    console.error('[MESSAGE_REACTION]', error)
     return new NextResponse('Internal Error', { status: 500 })
   }
 } 

@@ -30,6 +30,7 @@ export async function POST(
         emoji,
         userId,
         userName: `${user.firstName} ${user.lastName}`,
+        userImage: user.imageUrl,
         directMessage: {
           connect: { id: params.messageId }
         }

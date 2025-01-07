@@ -9,51 +9,41 @@ export async function PATCH(
 ) {
   try {
     const { userId } = auth()
+    const { content } = await req.json()
+
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const { content } = await req.json()
-
-    // Verify message ownership
-    const message = await prisma.message.findUnique({
-      where: { id: params.messageId },
-      include: { reactions: true }
+    const message = await prisma.message.update({
+      where: {
+        id: params.messageId,
+        userId // Ensure the user owns the message
+      },
+      data: {
+        content
+      },
+      include: {
+        reactions: true
+      }
     })
 
-    if (!message || message.userId !== userId) {
-      return new NextResponse('Unauthorized', { status: 401 })
+    // Trigger update for both channel and thread
+    if (message.threadId) {
+      await pusherServer.trigger(
+        `thread-${message.threadId}`,
+        'message-update',
+        message
+      )
+    } else {
+      await pusherServer.trigger(
+        `channel-${message.channelId}`,
+        'message-update',
+        message
+      )
     }
 
-    const updatedMessage = await prisma.message.update({
-      where: { id: params.messageId },
-      data: { content },
-      include: { reactions: true }
-    })
-
-    // Format the message for Pusher
-    const formattedMessage = {
-      id: updatedMessage.id,
-      content: updatedMessage.content,
-      createdAt: updatedMessage.createdAt,
-      userId: updatedMessage.userId,
-      userName: updatedMessage.userName,
-      userImage: updatedMessage.userImage,
-      channelId: updatedMessage.channelId,
-      reactions: updatedMessage.reactions,
-      fileUrl: updatedMessage.fileUrl,
-      fileName: updatedMessage.fileName,
-      fileType: updatedMessage.fileType
-    }
-
-    // Trigger Pusher event
-    await pusherServer.trigger(
-      `channel-${message.channelId}`,
-      'message-update',
-      formattedMessage
-    )
-
-    return NextResponse.json(formattedMessage)
+    return NextResponse.json(message)
   } catch (error) {
     console.error('[MESSAGE_PATCH]', error)
     return new NextResponse('Internal Error', { status: 500 })
@@ -66,32 +56,48 @@ export async function DELETE(
 ) {
   try {
     const { userId } = auth()
+
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // Verify message ownership and get channelId
     const message = await prisma.message.findUnique({
-      where: { id: params.messageId },
-      select: { userId: true, channelId: true }
+      where: {
+        id: params.messageId
+      }
     })
 
-    if (!message || message.userId !== userId) {
+    if (!message) {
+      return new NextResponse('Message not found', { status: 404 })
+    }
+
+    // Only allow message owner to delete
+    if (message.userId !== userId) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
     await prisma.message.delete({
-      where: { id: params.messageId }
+      where: {
+        id: params.messageId
+      }
     })
 
-    // Trigger Pusher event for deletion
-    await pusherServer.trigger(
-      `channel-${message.channelId}`,
-      'message-delete',
-      params.messageId
-    )
+    // Trigger delete for both channel and thread
+    if (message.threadId) {
+      await pusherServer.trigger(
+        `thread-${message.threadId}`,
+        'message-delete',
+        { messageId: params.messageId }
+      )
+    } else {
+      await pusherServer.trigger(
+        `channel-${message.channelId}`,
+        'message-delete',
+        { messageId: params.messageId }
+      )
+    }
 
-    return new NextResponse(null, { status: 204 })
+    return new NextResponse(null, { status: 200 })
   } catch (error) {
     console.error('[MESSAGE_DELETE]', error)
     return new NextResponse('Internal Error', { status: 500 })

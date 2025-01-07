@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { pusherClient } from '@/lib/pusher'
 import Message from './message'
+import Thread from './thread'
 import { PaperclipIcon, X } from 'lucide-react'
 
 interface Message {
@@ -18,6 +19,7 @@ interface Message {
   fileUrl?: string
   fileName?: string
   fileType?: string
+  replyCount?: number
 }
 
 export default function MessageList({ 
@@ -35,6 +37,7 @@ export default function MessageList({
 }) {
   const { userId } = useAuth()
   const [messages, setMessages] = useState(initialMessages)
+  const [activeThread, setActiveThread] = useState<any>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [newMessage, setNewMessage] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -71,6 +74,23 @@ export default function MessageList({
     channel.bind('message-delete', (messageId: string) => {
       setMessages((current) => 
         current.filter((msg) => msg.id !== messageId)
+      );
+    });
+
+    // Add new binding for thread updates
+    channel.bind('thread-update', ({ messageId, replyCount }: { messageId: string, replyCount: number }) => {
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === messageId
+            ? { ...message, replyCount }
+            : message
+        )
+      );
+      // Also update activeThread if it's the same message
+      setActiveThread((current: any) => 
+        current?.id === messageId
+          ? { ...current, replyCount }
+          : current
       );
     });
 
@@ -256,81 +276,105 @@ export default function MessageList({
     }
   }
 
-  return (
-    <div className="flex-1 flex flex-col">
-      <div className="flex-1 flex flex-col justify-end">
-        <div className="overflow-y-auto">
-          {messages.map((message) => (
-            <Message
-              key={message.id}
-              id={message.id}
-              content={message.content}
-              userName={message.userName}
-              userImage={message.userImage}
-              createdAt={message.createdAt}
-              userId={message.userId}
-              channelId={channelId!}
-              reactions={message.reactions}
-              fileUrl={message.fileUrl}
-              fileName={message.fileName}
-              fileType={message.fileType}
-              onDelete={handleDelete}
-              onEdit={handleEdit}
-              onReact={handleReact}
-              onRemoveReaction={handleRemoveReaction}
-            />
-          ))}
-          <div ref={bottomRef} />
-        </div>
-      </div>
+  const handleThreadClick = (message: any) => {
+    setActiveThread(message)
+  }
 
-      <form onSubmit={handleSubmit} className="p-4 border-t">
-        {selectedFile && (
-          <div className="mb-2 p-2 bg-gray-100 rounded flex items-center justify-between">
-            <span className="text-sm text-gray-600">{selectedFile.name}</span>
+  const handleCloseThread = () => {
+    setActiveThread(null)
+  }
+
+  const handleReplyCountChange = (messageId: string, newCount: number) => {
+    setMessages(current =>
+      current.map(message =>
+        message.id === messageId
+          ? { ...message, replyCount: newCount }
+          : message
+      )
+    )
+  }
+
+  return (
+    <div className="flex-1 flex">
+      <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col justify-end">
+          <div className="overflow-y-auto">
+            {messages.map((message) => (
+              <Message
+                key={message.id}
+                {...message}
+                isThreadReply={false}
+                isDM={isDM}
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+                onReact={handleReact}
+                onRemoveReaction={handleRemoveReaction}
+                onThreadClick={isDM ? undefined : () => handleThreadClick(message)}
+              />
+            ))}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-4 border-t">
+          {selectedFile && (
+            <div className="mb-2 p-2 bg-gray-100 rounded flex items-center justify-between">
+              <span className="text-sm text-gray-600">{selectedFile.name}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedFile(null)
+                  if (fileInputRef.current) fileInputRef.current.value = ''
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          
+          <div className="flex items-center gap-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              className="hidden"
+            />
             <button
               type="button"
-              onClick={() => {
-                setSelectedFile(null)
-                if (fileInputRef.current) fileInputRef.current.value = ''
-              }}
-              className="text-gray-500 hover:text-gray-700"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 hover:bg-gray-100 rounded"
             >
-              <X className="h-4 w-4" />
+              <PaperclipIcon className="h-5 w-5 text-gray-500" />
+            </button>
+            <input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Type a message..."
+              className="flex-1 p-2 border rounded"
+            />
+            <button
+              type="submit"
+              disabled={!newMessage.trim() && !selectedFile}
+              className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
+            >
+              Send
             </button>
           </div>
-        )}
-        
-        <div className="flex items-center gap-2">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 hover:bg-gray-100 rounded"
-          >
-            <PaperclipIcon className="h-5 w-5 text-gray-500" />
-          </button>
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            className="flex-1 p-2 border rounded"
-          />
-          <button
-            type="submit"
-            disabled={!newMessage.trim() && !selectedFile}
-            className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-          >
-            Send
-          </button>
-        </div>
-      </form>
+        </form>
+      </div>
+
+      {activeThread && (
+        <Thread
+          isOpen={!!activeThread}
+          onClose={handleCloseThread}
+          parentMessage={activeThread}
+          channelId={channelId}
+          workspaceId={workspaceId}
+          onReplyCountChange={handleReplyCountChange}
+        />
+      )}
     </div>
   )
 } 

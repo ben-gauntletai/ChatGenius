@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 model Workspace {
   id            String          @id @default(uuid())
   name          String
@@ -14,8 +20,8 @@ model Workspace {
   inviteCode    String         @unique
   members       WorkspaceMember[]
   channels      Channel[]
-  messages      Message[]
-  directMessages DirectMessage[]
+  messages      Message[]      @relation("WorkspaceToMessage")
+  directMessages DirectMessage[] @relation("WorkspaceToDirectMessage")
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 }
@@ -27,7 +33,7 @@ model WorkspaceMember {
   userImage   String
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  role        String    @default("MEMBER")
+  role        Role      @default(MEMBER)
   status      String    @default("online")
   joinedAt    DateTime  @default(now())
 
@@ -42,7 +48,7 @@ model Channel {
   isPrivate   Boolean   @default(false)
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  messages    Message[]
+  messages    Message[] @relation("ChannelToMessage")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -50,41 +56,80 @@ model Channel {
 }
 
 model Message {
-  id          String      @id @default(uuid())
+  id          String    @id @default(cuid())
   content     String
   fileUrl     String?
   fileName    String?
   fileType    String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
   userId      String
   userName    String
   userImage   String
   channelId   String
+  channel     Channel   @relation("ChannelToMessage", fields: [channelId], references: [id], onDelete: Cascade)
   workspaceId String
-  channel     Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation("WorkspaceToMessage", fields: [workspaceId], references: [id], onDelete: Cascade)
+  thread      Thread?   @relation("MessageThread")
+  parentThread Thread?  @relation("ThreadReplies", fields: [threadId], references: [id])
+  threadId    String?
   reactions   Reaction[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([channelId])
+  @@index([workspaceId])
+  @@index([threadId])
+}
+
+model DirectMessage {
+  id            String    @id @default(cuid())
+  content       String
+  fileUrl       String?
+  fileName      String?
+  fileType      String?
+  workspaceId   String
+  workspace     Workspace @relation("WorkspaceToDirectMessage", fields: [workspaceId], references: [id], onDelete: Cascade)
+  senderId      String
+  senderName    String
+  senderImage   String
+  receiverId    String
+  receiverName  String
+  receiverImage String
+  reactions     Reaction[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model Thread {
+  id              String    @id @default(cuid())
+  message         Message?  @relation("MessageThread", fields: [messageId], references: [id], onDelete: Cascade)
+  messageId       String?   @unique
+  replies         Message[]  @relation("ThreadReplies")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([messageId])
 }
 
 model Reaction {
-  id              String         @id @default(cuid())
+  id              String    @id @default(cuid())
   emoji           String
   userId          String
   userName        String
+  userImage       String
+  message         Message?  @relation(fields: [messageId], references: [id], onDelete: Cascade)
   messageId       String?
-  directMessageId String?
-  message         Message?       @relation(fields: [messageId], references: [id], onDelete: Cascade)
   directMessage   DirectMessage? @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+  directMessageId String?
+  createdAt      DateTime  @default(now())
 
+  @@unique([userId, messageId, emoji])
+  @@unique([userId, directMessageId, emoji])
   @@index([messageId])
   @@index([directMessageId])
-}
-
-enum Role {
-  OWNER
-  ADMIN
-  MEMBER
 }
 
 model Conversation {
@@ -95,27 +140,4 @@ model Conversation {
   updatedAt DateTime @updatedAt
 
   @@unique([user1Id, user2Id])
-}
-
-model DirectMessage {
-  id            String      @id @default(uuid())
-  content       String
-  fileUrl       String?
-  fileName      String?
-  fileType      String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  senderId      String
-  senderName    String
-  senderImage   String
-  receiverId    String
-  receiverName  String
-  receiverImage String
-  workspaceId   String
-  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  reactions     Reaction[]
-
-  @@index([workspaceId])
-  @@index([senderId])
-  @@index([receiverId])
 } 

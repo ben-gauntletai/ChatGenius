@@ -18,18 +18,28 @@ export default async function ChannelPage({
     return <div>Channel not found</div>;
   }
 
-  // Fetch messages with reactions
+  // Fetch messages with reactions, explicitly excluding thread replies
   const messages = await prisma.message.findMany({
     where: {
       channelId: params.channelId,
+      threadId: null, // Only fetch top-level messages
     },
     orderBy: {
       createdAt: 'asc',
     },
     include: {
-      reactions: true
+      reactions: true,
+      thread: {
+        include: {
+          replies: {
+            select: {
+              id: true
+            }
+          }
+        }
+      }
     }
-  })
+  });
 
   const formattedMessages = messages.map(message => ({
     id: message.id,
@@ -42,8 +52,9 @@ export default async function ChannelPage({
     reactions: message.reactions,
     fileUrl: message.fileUrl,
     fileName: message.fileName,
-    fileType: message.fileType
-  }))
+    fileType: message.fileType,
+    replyCount: message.thread?.replies.length ?? 0
+  }));
 
   return (
     <div className="flex flex-col h-full">
@@ -54,5 +65,5 @@ export default async function ChannelPage({
         workspaceId={params.workspaceId}
       />
     </div>
-  )
+  );
 } 

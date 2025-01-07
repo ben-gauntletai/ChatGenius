@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
-import { Pencil, Trash2, X, Check, Smile, SmilePlus, PaperclipIcon } from 'lucide-react'
+import { Pencil, Trash2, X, Check, Smile, SmilePlus, PaperclipIcon, MessageSquare } from 'lucide-react'
 import { useAuth } from '@clerk/nextjs'
 import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
@@ -23,6 +23,11 @@ interface MessageProps {
   onEdit: (messageId: string, newContent: string) => void
   onReact: (messageId: string, emoji: string) => void
   onRemoveReaction: (messageId: string, reactionId: string) => void
+  onThreadClick?: () => void
+  replyCount?: number
+  isThreadReply?: boolean
+  isDM?: boolean
+  conversationId?: boolean
 }
 
 export default function Message({ 
@@ -40,7 +45,12 @@ export default function Message({
   onDelete,
   onEdit,
   onReact,
-  onRemoveReaction
+  onRemoveReaction,
+  onThreadClick,
+  replyCount = 0,
+  isThreadReply = false,
+  isDM = false,
+  conversationId = false
 }: MessageProps) {
   const { userId: currentUserId } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
@@ -345,6 +355,20 @@ export default function Message({
             />
           </div>
         </div>
+      )}
+
+      {!isThreadReply && !isDM && onThreadClick && !conversationId && (
+        <button
+          onClick={onThreadClick}
+          className="flex items-center gap-1 text-gray-500 hover:text-gray-700"
+        >
+          <MessageSquare className="h-4 w-4" />
+          {replyCount > 0 && (
+            <span className="text-xs">
+              {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+            </span>
+          )}
+        </button>
       )}
     </div>
   )
