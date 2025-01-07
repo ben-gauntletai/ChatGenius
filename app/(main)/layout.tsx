@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronDown, Hash, MessageSquare, Trash2, Plus, LogOut } from 'lucide-react'
-import { useClerk } from "@clerk/nextjs"
+import { useClerk, SignOutButton } from "@clerk/nextjs"
 import MemberList from '@/components/workspace/member-list'
 import DirectMessageList from '@/components/workspace/direct-message-list'
 import AddChannelModal from '@/components/modals/add-channel-modal'
@@ -151,13 +151,12 @@ export default function MainLayout({
           <div className="border-t border-white/10">
             <MemberList workspaceId={workspaceId} />
             <div className="px-3 py-4">
-              <button
-                onClick={handleSignOut}
-                className="flex items-center w-full px-2 py-1 text-white/70 hover:text-white hover:bg-[#350D36] rounded"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                <span className="text-sm">Sign Out</span>
-              </button>
+              <SignOutButton signOutCallback={() => router.push('/')}>
+                <button className="flex items-center w-full px-2 py-1 text-white/70 hover:text-white hover:bg-[#350D36] rounded">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  <span className="text-sm">Sign Out</span>
+                </button>
+              </SignOutButton>
             </div>
           </div>
         </div>
