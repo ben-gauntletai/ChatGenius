@@ -24,14 +24,28 @@ export async function POST(req: Request) {
     )
 
     const user = await response.json()
+
+    // First, get the channel to get its workspaceId
+    const channel = await prisma.channel.findUnique({
+      where: { id: channelId }
+    })
+
+    if (!channel) {
+      return new NextResponse('Channel not found', { status: 404 })
+    }
     
     const message = await prisma.message.create({
       data: {
         content,
-        channelId,
         userId,
         userName: `${user.first_name} ${user.last_name}`,
-        userImage: user.image_url
+        userImage: user.image_url,
+        channel: {
+          connect: { id: channelId }
+        },
+        workspace: {
+          connect: { id: channel.workspaceId }
+        }
       },
       include: {
         channel: true

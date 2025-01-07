@@ -19,40 +19,52 @@ interface Message {
 export default function MessageList({ 
   initialMessages = [],
   channelId,
-  workspaceId
+  workspaceId,
+  isDM = false,
+  otherUserId
 }: { 
   initialMessages: Message[]
   channelId?: string
   workspaceId?: string
+  isDM?: boolean
+  otherUserId?: string
 }) {
   const { userId } = useAuth()
-  const [messages, setMessages] = useState<Message[]>(initialMessages)
-  const [newMessage, setNewMessage] = useState('')
+  const [messages, setMessages] = useState(initialMessages)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [newMessage, setNewMessage] = useState('')
+  const [processedMessageIds] = useState(new Set(initialMessages.map(m => m.id)))
 
-  // Subscribe to Pusher channel when component mounts or channelId changes
   useEffect(() => {
-    if (!channelId) return
+    if (!userId || !workspaceId) return
 
-    // Subscribe to the channel
-    const channelName = `channel-${channelId}`
+    const channelName = isDM 
+      ? `dm-${[userId, otherUserId].sort().join('-')}`
+      : `channel-${channelId}`
+
     const channel = pusherClient.subscribe(channelName)
 
     // Handle new messages
-    const handleNewMessage = (message: Message) => {
-      setMessages((current) => [...current, message])
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
+    channel.bind('new-message', (message: any) => {
+      if (!processedMessageIds.has(message.id)) {
+        processedMessageIds.add(message.id)
+        setMessages((current) => [...current, message])
+      }
+    })
 
-    // Bind to the new-message event
-    channel.bind('new-message', handleNewMessage)
+    // Handle message updates (including reactions)
+    channel.bind('message-updated', (updatedMessage: any) => {
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === updatedMessage.id ? updatedMessage : message
+        )
+      )
+    })
 
-    // Cleanup on unmount or when channelId changes
     return () => {
-      channel.unbind('new-message', handleNewMessage)
       pusherClient.unsubscribe(channelName)
     }
-  }, [channelId])
+  }, [channelId, isDM, otherUserId, userId, workspaceId, processedMessageIds])
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -64,16 +76,15 @@ export default function MessageList({
     if (!newMessage.trim()) return
 
     try {
-      const endpoint = `/api/messages`
+      const endpoint = isDM ? '/api/direct-messages' : '/api/messages'
+      const body = isDM 
+        ? { content: newMessage, receiverId: otherUserId, workspaceId }
+        : { content: newMessage, channelId }
+
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: newMessage,
-          channelId: channelId
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       })
 
       if (!response.ok) {
@@ -88,7 +99,11 @@ export default function MessageList({
 
   const handleDelete = async (messageId: string) => {
     try {
-      const response = await fetch(`/api/messages/${messageId}`, {
+      const endpoint = isDM 
+        ? `/api/direct-messages/${messageId}`
+        : `/api/messages/${messageId}`
+
+      const response = await fetch(endpoint, {
         method: 'DELETE',
       })
 
@@ -106,7 +121,11 @@ export default function MessageList({
 
   const handleEdit = async (messageId: string, newContent: string) => {
     try {
-      const response = await fetch(`/api/messages/${messageId}`, {
+      const endpoint = isDM 
+        ? `/api/direct-messages/${messageId}`
+        : `/api/messages/${messageId}`
+
+      const response = await fetch(endpoint, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -132,7 +151,9 @@ export default function MessageList({
 
   const handleReact = async (messageId: string, emoji: string) => {
     try {
-      const endpoint = `/api/messages/${messageId}/reactions`
+      const endpoint = isDM 
+        ? `/api/direct-messages/${messageId}/reactions`
+        : `/api/messages/${messageId}/reactions`
       
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -162,17 +183,19 @@ export default function MessageList({
 
   const handleRemoveReaction = async (messageId: string, reactionId: string) => {
     try {
-      const endpoint = `/api/messages/${messageId}/reactions/${reactionId}`;
+      const endpoint = isDM
+        ? `/api/direct-messages/${messageId}/reactions/${reactionId}`
+        : `/api/messages/${messageId}/reactions/${reactionId}`
       
       const response = await fetch(endpoint, {
         method: 'DELETE',
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to remove reaction');
+        throw new Error('Failed to remove reaction')
       }
 
-      const updatedMessage = await response.json();
+      const updatedMessage = await response.json()
       
       setMessages((current) =>
         current.map((message) =>
@@ -180,11 +203,11 @@ export default function MessageList({
             ? { ...message, reactions: updatedMessage.reactions }
             : message
         )
-      );
+      )
     } catch (error) {
-      console.error('Failed to remove reaction:', error);
+      console.error('Failed to remove reaction:', error)
     }
-  };
+  }
 
   return (
     <div className="flex-1 flex flex-col">

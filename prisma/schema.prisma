@@ -8,13 +8,16 @@ datasource db {
 }
 
 model Workspace {
-  id          String    @id @default(cuid())
-  name        String
-  slug        String    @unique
-  imageUrl    String?
-  createdAt   DateTime  @default(now())
-  channels    Channel[]
-  members     WorkspaceMember[]
+  id             String          @id @default(cuid())
+  name           String
+  slug           String          @unique
+  imageUrl       String?
+  channels       Channel[]
+  members        WorkspaceMember[]
+  messages       Message[]
+  directMessages DirectMessage[] @relation("WorkspaceDirectMessages")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model WorkspaceMember {
@@ -28,6 +31,7 @@ model WorkspaceMember {
   joinedAt    DateTime  @default(now())
 
   @@unique([userId, workspaceId])
+  @@index([workspaceId])
 }
 
 model Channel {
@@ -36,32 +40,44 @@ model Channel {
   description String?
   isPrivate   Boolean   @default(false)
   workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   messages    Message[]
   createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
 }
 
 model Message {
   id        String     @id @default(cuid())
   content   String
   createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   userId    String
   userName  String
   userImage String
   channelId String
   channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
   reactions Reaction[]
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  @@index([channelId])
+  @@index([workspaceId])
 }
 
 model Reaction {
-  id        String  @id @default(cuid())
-  emoji     String
-  userId    String
-  userName  String
-  messageId String
-  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  id              String         @id @default(cuid())
+  emoji           String
+  userId          String
+  userName        String
+  messageId       String?
+  directMessageId String?
+  message         Message?       @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  directMessage   DirectMessage? @relation("DirectMessageReactions", fields: [directMessageId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, messageId, emoji])
+  @@index([messageId])
+  @@index([directMessageId])
 }
 
 enum Role {
@@ -78,4 +94,24 @@ model Conversation {
   updatedAt DateTime @updatedAt
 
   @@unique([user1Id, user2Id])
+}
+
+model DirectMessage {
+  id            String      @id @default(cuid())
+  content       String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  senderId      String
+  senderName    String
+  senderImage   String
+  receiverId    String
+  receiverName  String
+  receiverImage String
+  workspaceId   String
+  reactions     Reaction[]  @relation("DirectMessageReactions")
+  workspace     Workspace   @relation("WorkspaceDirectMessages", fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([senderId])
+  @@index([receiverId])
 } 
