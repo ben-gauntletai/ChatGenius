@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
+import { pusherServer } from '@/utils/pusher'
 
 export async function PATCH(
   req: Request,
@@ -16,7 +17,8 @@ export async function PATCH(
 
     // Verify message ownership
     const message = await prisma.message.findUnique({
-      where: { id: params.messageId }
+      where: { id: params.messageId },
+      include: { reactions: true }
     })
 
     if (!message || message.userId !== userId) {
@@ -25,10 +27,33 @@ export async function PATCH(
 
     const updatedMessage = await prisma.message.update({
       where: { id: params.messageId },
-      data: { content }
+      data: { content },
+      include: { reactions: true }
     })
 
-    return NextResponse.json(updatedMessage)
+    // Format the message for Pusher
+    const formattedMessage = {
+      id: updatedMessage.id,
+      content: updatedMessage.content,
+      createdAt: updatedMessage.createdAt,
+      userId: updatedMessage.userId,
+      userName: updatedMessage.userName,
+      userImage: updatedMessage.userImage,
+      channelId: updatedMessage.channelId,
+      reactions: updatedMessage.reactions,
+      fileUrl: updatedMessage.fileUrl,
+      fileName: updatedMessage.fileName,
+      fileType: updatedMessage.fileType
+    }
+
+    // Trigger Pusher event
+    await pusherServer.trigger(
+      `channel-${message.channelId}`,
+      'message-update',
+      formattedMessage
+    )
+
+    return NextResponse.json(formattedMessage)
   } catch (error) {
     console.error('[MESSAGE_PATCH]', error)
     return new NextResponse('Internal Error', { status: 500 })
@@ -45,9 +70,10 @@ export async function DELETE(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // Verify message ownership
+    // Verify message ownership and get channelId
     const message = await prisma.message.findUnique({
-      where: { id: params.messageId }
+      where: { id: params.messageId },
+      select: { userId: true, channelId: true }
     })
 
     if (!message || message.userId !== userId) {
@@ -57,6 +83,13 @@ export async function DELETE(
     await prisma.message.delete({
       where: { id: params.messageId }
     })
+
+    // Trigger Pusher event for deletion
+    await pusherServer.trigger(
+      `channel-${message.channelId}`,
+      'message-delete',
+      params.messageId
+    )
 
     return new NextResponse(null, { status: 204 })
   } catch (error) {

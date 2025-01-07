@@ -9,6 +9,7 @@ import MemberList from '@/components/workspace/member-list'
 import AddChannelModal from '@/components/modals/add-channel-modal'
 import DeleteChannelModal from '@/components/modals/delete-channel-modal'
 import DirectMessageList from '@/components/workspace/direct-message-list'
+import StatusDropdown from '@/components/status-dropdown'
 
 interface Channel {
   id: string
@@ -82,6 +83,9 @@ export default function MainLayout({
       <div className="w-60 bg-[#3F0E40] text-white flex flex-col">
         <div className="p-4 border-b border-white/10">
           <h1 className="text-white font-bold text-lg">Your Workspace</h1>
+          <div className="mt-2">
+            <StatusDropdown workspaceId={params.workspaceId as string} />
+          </div>
         </div>
         
         <div className="flex-1 overflow-y-auto space-y-4 py-4">

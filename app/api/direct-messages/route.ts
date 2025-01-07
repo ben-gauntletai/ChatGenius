@@ -40,7 +40,6 @@ export async function POST(req: Request) {
       }
     })
 
-    // Format the message for real-time updates
     const formattedMessage = {
       id: message.id,
       content: message.content,
@@ -52,14 +51,13 @@ export async function POST(req: Request) {
       fileUrl: message.fileUrl,
       fileName: message.fileName,
       fileType: message.fileType,
-      isEdited: message.updatedAt !== message.createdAt
+      isEdited: false
     }
 
-    // Trigger Pusher event with formatted message
     const channelName = `dm-${[userId, receiverId].sort().join('-')}`
     await pusherServer.trigger(channelName, 'new-message', formattedMessage)
 
-    return NextResponse.json(message)
+    return new NextResponse('Message sent successfully', { status: 200 })
   } catch (error) {
     console.error('[DIRECT_MESSAGES_POST]', error)
     return new NextResponse('Internal Error', { status: 500 })

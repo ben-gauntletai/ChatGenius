@@ -28,6 +28,7 @@ model WorkspaceMember {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   role        String    @default("MEMBER")
+  status      String    @default("online")
   joinedAt    DateTime  @default(now())
 
   @@unique([userId, workspaceId])
