@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface AddChannelModalProps {
   isOpen: boolean
@@ -16,6 +17,7 @@ export default function AddChannelModal({
   workspaceId,
   onChannelCreated 
 }: AddChannelModalProps) {
+  const router = useRouter();
   const [channelName, setChannelName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
@@ -40,9 +42,13 @@ export default function AddChannelModal({
         throw new Error('Failed to create channel')
       }
 
+      const channel = await response.json();
       setChannelName('')
-      onChannelCreated()
+      onChannelCreated?.();
       onClose()
+      
+      await router.replace(`/${workspaceId}/${channel.id}`);
+      router.refresh();
     } catch (error) {
       console.error('Error creating channel:', error)
     } finally {

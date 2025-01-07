@@ -16,25 +16,32 @@ export default function ChannelList({ workspaceId }: { workspaceId: string }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchChannels = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch(`/api/workspaces/${workspaceId}/channels`);
-        const data = await response.json();
-        setChannels(data);
-      } catch (error) {
-        console.error('Failed to fetch channels:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const fetchChannels = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/workspaces/${workspaceId}/channels`, {
+        cache: 'no-store'
+      });
+      const data = await response.json();
+      setChannels(data);
+    } catch (error) {
+      console.error('Failed to fetch channels:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchChannels();
   }, [workspaceId]);
 
-  const handleChannelClick = (channelId: string) => {
-    router.push(`/${workspaceId}/${channelId}`);
+  const handleChannelClick = async (channelId: string) => {
+    await router.replace(`/${workspaceId}/${channelId}`);
+    router.refresh();
+  };
+
+  const handleChannelCreated = async () => {
+    await fetchChannels();
   };
 
   return (

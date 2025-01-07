@@ -2,12 +2,15 @@ import MessageList from '@/components/layout/main-content/message-list'
 import ChannelHeader from '@/components/layout/main-content/channel-header'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function ChannelPage({
   params
 }: {
   params: { workspaceId: string; channelId: string }
 }) {
-  // Fetch channel details
+  // Fetch channel details with no-cache headers
   const channel = await prisma.channel.findUnique({
     where: {
       id: params.channelId,
@@ -18,11 +21,11 @@ export default async function ChannelPage({
     return <div>Channel not found</div>;
   }
 
-  // Fetch messages with reactions, explicitly excluding thread replies
+  // Fetch messages with reactions with no-cache headers
   const messages = await prisma.message.findMany({
     where: {
       channelId: params.channelId,
-      threadId: null, // Only fetch top-level messages
+      threadId: null,
     },
     orderBy: {
       createdAt: 'asc',
@@ -60,6 +63,7 @@ export default async function ChannelPage({
     <div className="flex flex-col h-full">
       <ChannelHeader name={channel.name} />
       <MessageList 
+        key={params.channelId} // Add key to force remount
         initialMessages={formattedMessages} 
         channelId={params.channelId}
         workspaceId={params.workspaceId}
