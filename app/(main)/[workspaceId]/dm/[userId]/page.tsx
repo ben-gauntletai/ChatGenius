@@ -36,8 +36,18 @@ export default async function DirectMessagePage({
     orderBy: {
       createdAt: 'asc'
     },
-    include: {
-      reactions: true
+    select: {
+      id: true,
+      content: true,
+      createdAt: true,
+      updatedAt: true,
+      senderId: true,
+      senderName: true,
+      senderImage: true,
+      reactions: true,
+      fileUrl: true,
+      fileName: true,
+      fileType: true
     }
   });
 
@@ -49,7 +59,10 @@ export default async function DirectMessagePage({
     userName: message.senderName,
     userImage: message.senderImage,
     reactions: message.reactions,
-    isEdited: message.updatedAt !== message.createdAt
+    isEdited: message.updatedAt !== message.createdAt,
+    fileUrl: message.fileUrl,
+    fileName: message.fileName,
+    fileType: message.fileType
   }));
 
   return (

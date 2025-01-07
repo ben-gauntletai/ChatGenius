@@ -42,7 +42,8 @@ export default function MessageList({
 
   // Add Pusher subscription
   useEffect(() => {
-    if (!channelId) return;
+    if (isDM && !otherUserId) return;
+    if (!isDM && !channelId) return;
 
     const channelName = isDM 
       ? `dm-${[userId, otherUserId].sort().join('-')}` 

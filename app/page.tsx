@@ -12,7 +12,9 @@ export default async function Home() {
 
   // Find the default workspace
   const defaultWorkspace = await prisma.workspace.findFirst({
-    where: { slug: 'general' },
+    where: {
+      name: 'general'
+    },
     include: {
       channels: {
         take: 1,

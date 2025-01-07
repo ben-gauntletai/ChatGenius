@@ -8,16 +8,16 @@ datasource db {
 }
 
 model Workspace {
-  id             String          @id @default(cuid())
-  name           String
-  slug           String          @unique
-  imageUrl       String?
-  channels       Channel[]
-  members        WorkspaceMember[]
-  messages       Message[]
-  directMessages DirectMessage[] @relation("WorkspaceDirectMessages")
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id            String          @id @default(uuid())
+  name          String
+  imageUrl      String
+  inviteCode    String         @unique
+  members       WorkspaceMember[]
+  channels      Channel[]
+  messages      Message[]
+  directMessages DirectMessage[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 }
 
 model WorkspaceMember {
@@ -74,7 +74,7 @@ model Reaction {
   messageId       String?
   directMessageId String?
   message         Message?       @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  directMessage   DirectMessage? @relation("DirectMessageReactions", fields: [directMessageId], references: [id], onDelete: Cascade)
+  directMessage   DirectMessage? @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
   @@index([directMessageId])
@@ -97,8 +97,11 @@ model Conversation {
 }
 
 model DirectMessage {
-  id            String      @id @default(cuid())
+  id            String      @id @default(uuid())
   content       String
+  fileUrl       String?
+  fileName      String?
+  fileType      String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   senderId      String
@@ -108,8 +111,8 @@ model DirectMessage {
   receiverName  String
   receiverImage String
   workspaceId   String
-  reactions     Reaction[]  @relation("DirectMessageReactions")
-  workspace     Workspace   @relation("WorkspaceDirectMessages", fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reactions     Reaction[]
 
   @@index([workspaceId])
   @@index([senderId])
