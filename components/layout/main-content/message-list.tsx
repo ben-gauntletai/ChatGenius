@@ -91,65 +91,67 @@ export default function MessageList({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('Submit triggered, selectedFile:', selectedFile)  // Debug log
     if (!newMessage.trim() && !selectedFile) return
 
     try {
       let fileData = null
       
       if (selectedFile) {
-        console.log('Preparing to upload file:', selectedFile)  // Debug log
+        console.log('Uploading file...', selectedFile)
         const formData = new FormData()
         formData.append('file', selectedFile)
         
-        console.log('Sending upload request...')  // Debug log
         const uploadResponse = await fetch('/api/upload', {
           method: 'POST',
           body: formData,
         })
-        
+
         if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text()
-          console.error('Upload failed:', errorText)  // Debug log
-          throw new Error(`Failed to upload file: ${errorText}`)
+          throw new Error('Failed to upload file')
         }
-        
+
         fileData = await uploadResponse.json()
-        console.log('Upload successful:', fileData)  // Debug log
+        console.log('File upload response:', fileData)
       }
 
-      const endpoint = isDM ? '/api/direct-messages' : '/api/messages'
-      const body = isDM 
-        ? { 
-            content: newMessage, 
-            receiverId: otherUserId,
-            workspaceId,
-            fileUrl: fileData?.url,
-            fileName: fileData?.name,
-            fileType: fileData?.type,
-          }
-        : { 
-            content: newMessage, 
-            channelId,
-            fileUrl: fileData?.url,
-            fileName: fileData?.name,
-            fileType: fileData?.type,
-          }
+      const endpoint = isDM 
+        ? '/api/direct-messages' 
+        : `/api/messages`
 
-      console.log('Sending message with body:', body);
+      const messageData = {
+        content: newMessage,
+        channelId,
+        workspaceId,
+        receiverId: otherUserId,
+        fileUrl: fileData?.url,
+        fileName: fileData?.name,
+        fileType: fileData?.type
+      }
+
+      console.log('Sending message data:', messageData) // Debug log
 
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messageData),
       })
 
       if (!response.ok) {
+        const errorData = await response.text()
+        console.error('Failed to send message:', errorData)
         throw new Error('Failed to send message')
       }
 
+      const result = await response.json()
+      console.log('Message creation result:', result) // Debug log
+
       setNewMessage('')
       setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     } catch (error) {
       console.error('Error sending message:', error)
     }

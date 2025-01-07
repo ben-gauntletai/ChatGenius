@@ -49,24 +49,21 @@ model Channel {
 }
 
 model Message {
-  id        String     @id @default(cuid())
-  content   String
-  fileUrl   String?
-  fileName  String?
-  fileType  String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  userId    String
-  userName  String
-  userImage String
-  channelId String
-  channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  reactions Reaction[]
-  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id          String      @id @default(uuid())
+  content     String
+  fileUrl     String?
+  fileName    String?
+  fileType    String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  userId      String
+  userName    String
+  userImage   String
+  channelId   String
   workspaceId String
-
-  @@index([channelId])
-  @@index([workspaceId])
+  channel     Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reactions   Reaction[]
 }
 
 model Reaction {

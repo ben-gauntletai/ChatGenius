@@ -1,7 +1,3 @@
-import MessageList from '@/components/layout/main-content/message-list'
-import ChannelHeader from '@/components/layout/main-content/channel-header'
-import { prisma } from '@/lib/prisma'
-
 export default async function ChannelPage({
   params
 }: {
@@ -31,6 +27,8 @@ export default async function ChannelPage({
     }
   })
 
+  console.log('Raw messages from database:', JSON.stringify(messages, null, 2))
+
   const formattedMessages = messages.map(message => ({
     id: message.id,
     content: message.content,
@@ -44,6 +42,8 @@ export default async function ChannelPage({
     fileName: message.fileName,
     fileType: message.fileType
   }))
+
+  console.log('Formatted messages:', JSON.stringify(formattedMessages, null, 2))
 
   return (
     <div className="flex flex-col h-full">

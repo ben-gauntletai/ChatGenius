@@ -168,22 +168,23 @@ export default function Message({
   const FileAttachment = ({ fileName, fileUrl }: { fileName: string, fileUrl: string }) => {
     const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName.toLowerCase())
     
+    console.log('FileAttachment render:', { fileName, fileUrl, isImage })
+    
     if (isImage) {
       return (
         <div className="mt-2 max-w-sm">
-          <div className="relative w-full h-[200px]">
-            <Image
+          <div className="relative w-full h-[200px] bg-gray-100 rounded-md">
+            <img
               src={fileUrl}
               alt={fileName}
-              fill
-              className="rounded-md object-contain"
+              className="rounded-md object-contain w-full h-full"
             />
           </div>
           <a 
             href={fileUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-blue-500 hover:underline"
+            className="text-sm text-blue-500 hover:underline mt-1 block"
           >
             {fileName}
           </a>
@@ -204,6 +205,13 @@ export default function Message({
       </div>
     )
   }
+
+  console.log('Message render:', {
+    content,
+    fileUrl,
+    fileName,
+    fileType
+  });
 
   return (
     <div 
@@ -283,13 +291,16 @@ export default function Message({
           </div>
         ) : (
           <>
-            <p className="text-[15px] text-gray-900">{content}</p>
-            
-            {fileUrl && (
-              <FileAttachment fileName={fileName!} fileUrl={fileUrl} />
+            {content && (
+              <p className="text-[15px] text-gray-900 mt-1">{content}</p>
             )}
             
-            {/* Reactions */}
+            {fileUrl && fileName && (
+              <div className="mt-2">
+                <FileAttachment fileName={fileName} fileUrl={fileUrl} />
+              </div>
+            )}
+            
             <div className="flex flex-wrap gap-1 mt-1">
               {Object.entries(groupedReactions).map(([emoji, reactions]) => (
                 <button
