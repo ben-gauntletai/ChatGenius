@@ -10,6 +10,10 @@ export default async function Home() {
     redirect('/sign-in')
   }
 
+  console.log('\n=== User Login Session Start ===')
+  console.log('User ID:', userId)
+  console.log('User Name:', `${user.firstName} ${user.lastName}`)
+
   // Find the default workspace
   const defaultWorkspace = await prisma.workspace.findFirst({
     where: {
@@ -26,26 +30,56 @@ export default async function Home() {
   })
 
   if (!defaultWorkspace) {
+    console.error('Default workspace not found')
     return <div>Default workspace not found. Please run database seed.</div>
   }
 
-  // Ensure the user is a member of the workspace
-  await prisma.workspaceMember.upsert({
+  // Find existing workspace member with their current status
+  const existingMember = await prisma.workspaceMember.findFirst({
     where: {
-      userId_workspaceId: {
-        userId: userId,
-        workspaceId: defaultWorkspace.id
-      }
-    },
-    update: {},
-    create: {
       userId: userId,
-      userName: `${user.firstName} ${user.lastName}`,
-      userImage: user.imageUrl,
-      workspaceId: defaultWorkspace.id,
-      role: 'MEMBER'
+      workspaceId: defaultWorkspace.id
     }
   })
+
+  console.log('\n=== Member Status Check ===')
+  console.log('Existing Member:', existingMember)
+
+  // Create or update workspace member
+  try {
+    const member = await prisma.workspaceMember.upsert({
+      where: {
+        userId_workspaceId: {
+          userId: userId,
+          workspaceId: defaultWorkspace.id
+        }
+      },
+      update: {
+        userName: `${user.firstName} ${user.lastName}`,
+        userImage: user.imageUrl,
+        // Keep existing status if member exists
+        ...(existingMember && {
+          status: existingMember.status,
+          statusUpdatedAt: existingMember.statusUpdatedAt
+        })
+      },
+      create: {
+        userId: userId,
+        userName: `${user.firstName} ${user.lastName}`,
+        userImage: user.imageUrl,
+        workspaceId: defaultWorkspace.id,
+        role: 'MEMBER',
+        status: 'ONLINE',
+        statusUpdatedAt: new Date()
+      }
+    })
+
+    console.log('\n=== Updated Member Status ===')
+    console.log('Current Status:', member.status)
+    console.log('Status Last Updated:', member.statusUpdatedAt)
+  } catch (error) {
+    console.error('Error upserting member:', error)
+  }
 
   // Redirect to the first channel
   const firstChannel = defaultWorkspace.channels[0]

@@ -7,15 +7,27 @@ export async function GET(
   { params }: { params: { workspaceId: string } }
 ) {
   try {
+    console.log('\n=== Fetching Members ===');
     const members = await prisma.workspaceMember.findMany({
       where: {
         workspaceId: params.workspaceId,
+      },
+      select: {
+        id: true,
+        userId: true,
+        userName: true,
+        userImage: true,
+        role: true,
+        status: true,        // Explicitly include status
+        statusUpdatedAt: true,  // Include statusUpdatedAt
+        joinedAt: true
       },
       orderBy: {
         joinedAt: 'asc',
       },
     });
 
+    console.log('Members with status:', members);
     return NextResponse.json(members);
   } catch (error) {
     console.error('[MEMBERS_GET]', error);
@@ -38,21 +50,29 @@ export async function POST(
       return new NextResponse('User not found', { status: 404 });
     }
 
-    // Check if already a member
-    const existingMember = await prisma.workspaceMember.findUnique({
+    // Check if already a member and get their last status
+    const existingMember = await prisma.workspaceMember.findFirst({
       where: {
-        userId_workspaceId: {
-          userId,
-          workspaceId: params.workspaceId,
-        },
+        userId,
+        workspaceId: params.workspaceId,
       },
     });
 
     if (existingMember) {
-      return NextResponse.json(existingMember);
+      // If member exists, update their info but keep their status
+      const updatedMember = await prisma.workspaceMember.update({
+        where: {
+          id: existingMember.id
+        },
+        data: {
+          userName: `${user.firstName} ${user.lastName}`,
+          userImage: user.imageUrl,
+        }
+      });
+      return NextResponse.json(updatedMember);
     }
 
-    // Add as new member
+    // Add as new member with default ONLINE status
     const member = await prisma.workspaceMember.create({
       data: {
         userId,
@@ -60,6 +80,8 @@ export async function POST(
         userImage: user.imageUrl,
         workspaceId: params.workspaceId,
         role: 'MEMBER',
+        status: 'ONLINE',  // Default status for new members
+        statusUpdatedAt: new Date(),
       },
     });
 

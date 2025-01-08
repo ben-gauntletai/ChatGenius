@@ -68,15 +68,16 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
                   params.userId === member.userId ? 'bg-white/10' : ''
                 }`}
               >
-                <div className="relative w-4 h-4">
+                <div className="flex-shrink-0 w-5 h-5 relative">
                   <Image
                     src={member.userImage}
                     alt={member.userName}
-                    fill
+                    width={20}
+                    height={20}
                     className="rounded-sm object-cover"
                   />
                 </div>
-                <span className="text-white/70 text-[15px]">
+                <span className="text-white/70 text-[15px] truncate flex-1 text-left">
                   {member.userName}
                 </span>
               </button>

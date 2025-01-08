@@ -1,24 +1,57 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
+import { useAuth } from '@clerk/nextjs';
 
 const statuses = [
-  { id: 'Online', label: 'Online' },
-  { id: 'Away', label: 'Away' },
-  { id: 'Busy', label: 'Busy' },
-  { id: 'Offline', label: 'Offline' }
+  { id: 'ONLINE', label: 'Active', color: 'bg-green-500' },
+  { id: 'AWAY', label: 'Away', color: 'bg-yellow-500' },
+  { id: 'BUSY', label: 'Busy', color: 'bg-red-500' },
+  { id: 'OFFLINE', label: 'Offline', color: 'bg-gray-500' }
 ];
 
 export default function StatusDropdown({ 
   workspaceId,
-  currentStatus = 'Online'
+  currentStatus
 }: { 
   workspaceId: string;
   currentStatus?: string;
 }) {
+  const { userId } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [status, setStatus] = useState(currentStatus);
+  const [status, setStatus] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch initial status on mount
+  useEffect(() => {
+    const fetchStatus = async () => {
+      if (!workspaceId || !userId) return;
+      
+      try {
+        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
+        const members = await response.json();
+        const currentMember = members.find((m: any) => m.userId === userId);
+        
+        if (currentMember?.status) {
+          setStatus(currentMember.status);
+        }
+      } catch (error) {
+        console.error('Failed to fetch status:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStatus();
+  }, [workspaceId, userId]);
+
+  // Update local state when prop changes
+  useEffect(() => {
+    if (currentStatus && !isLoading) {
+      setStatus(currentStatus);
+    }
+  }, [currentStatus, isLoading]);
 
   const handleStatusChange = async (newStatus: string) => {
     try {
@@ -28,7 +61,9 @@ export default function StatusDropdown({
         body: JSON.stringify({ status: newStatus })
       });
 
-      if (!response.ok) throw new Error('Failed to update status');
+      if (!response.ok) {
+        throw new Error('Failed to update status');
+      }
 
       setStatus(newStatus);
       setIsOpen(false);
@@ -37,6 +72,15 @@ export default function StatusDropdown({
     }
   };
 
+  if (isLoading || !status) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1">
+        <div className="w-2 h-2 rounded-full bg-gray-500 animate-pulse" />
+        <span className="text-sm text-white/70">Loading...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="relative">
       <button
@@ -44,12 +88,14 @@ export default function StatusDropdown({
         className="flex items-center gap-2 px-3 py-1 rounded hover:bg-[#4A154B] text-white/70 hover:text-white"
       >
         <div className={`w-2 h-2 rounded-full ${
-          status === 'Online' ? 'bg-green-500' :
-          status === 'Away' ? 'bg-yellow-500' :
-          status === 'Busy' ? 'bg-red-500' :
+          status === 'ONLINE' ? 'bg-green-500' :
+          status === 'AWAY' ? 'bg-yellow-500' :
+          status === 'BUSY' ? 'bg-red-500' :
           'bg-gray-500'
         }`} />
-        <span className="text-sm">{status}</span>
+        <span className="text-sm">
+          {statuses.find(s => s.id === status)?.label ?? 'Loading...'}
+        </span>
         <ChevronDown className="w-4 h-4" />
       </button>
 
@@ -61,12 +107,7 @@ export default function StatusDropdown({
               onClick={() => handleStatusChange(s.id)}
               className="flex items-center w-full px-4 py-2 text-sm text-white/70 hover:bg-[#4A154B] hover:text-white"
             >
-              <div className={`w-2 h-2 rounded-full mr-2 ${
-                s.id === 'Online' ? 'bg-green-500' :
-                s.id === 'Away' ? 'bg-yellow-500' :
-                s.id === 'Busy' ? 'bg-red-500' :
-                'bg-gray-500'
-              }`} />
+              <div className={`w-2 h-2 rounded-full mr-2 ${s.color}`} />
               {s.label}
               {status === s.id && (
                 <Check className="w-4 h-4 ml-auto" />

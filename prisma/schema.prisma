@@ -13,6 +13,13 @@ enum Role {
   MEMBER
 }
 
+enum UserStatus {
+  ONLINE
+  AWAY
+  BUSY
+  OFFLINE
+}
+
 model Workspace {
   id            String          @id @default(uuid())
   name          String
@@ -34,11 +41,13 @@ model WorkspaceMember {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   role        Role      @default(MEMBER)
-  status      String    @default("online")
+  status      UserStatus @default(ONLINE)
+  statusUpdatedAt DateTime @default(now())
   joinedAt    DateTime  @default(now())
 
   @@unique([userId, workspaceId])
   @@index([workspaceId])
+  @@index([userId])
 }
 
 model Channel {
@@ -140,4 +149,11 @@ model Conversation {
   updatedAt DateTime @updatedAt
 
   @@unique([user1Id, user2Id])
+}
+
+model User {
+  id        String     @id @default(cuid())
+  userId    String     @unique  // Clerk user ID
+  status    UserStatus @default(ONLINE)
+  statusUpdatedAt DateTime @default(now())
 } 
