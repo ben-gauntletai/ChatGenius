@@ -379,8 +379,8 @@ export default function MessageList({
   return (
     <div className="flex-1 flex">
       <div className="flex-1 flex flex-col">
-        <div className="flex-1 flex flex-col justify-end">
-          <div className="overflow-y-auto">
+        <div className="flex-1">
+          <div className="h-full">
             {messages.map((message) => (
               <Message
                 key={message.id}

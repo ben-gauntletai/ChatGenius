@@ -60,14 +60,16 @@ export default async function ChannelPage({
   }));
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <ChannelHeader name={channel.name} />
-      <MessageList 
-        key={params.channelId} // Add key to force remount
-        initialMessages={formattedMessages} 
-        channelId={params.channelId}
-        workspaceId={params.workspaceId}
-      />
+      <div className="flex-1 overflow-y-auto">
+        <MessageList 
+          key={params.channelId}
+          initialMessages={formattedMessages} 
+          channelId={params.channelId}
+          workspaceId={params.workspaceId}
+        />
+      </div>
     </div>
   );
 } 
