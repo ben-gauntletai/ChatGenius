@@ -70,6 +70,7 @@ export default function MainLayout({
         setChannels(data)
       } catch (error) {
         console.error('Error fetching channels:', error)
+        setChannels([])
       }
     }
 
@@ -100,7 +101,7 @@ export default function MainLayout({
             
             {isChannelListExpanded && (
               <div className="space-y-1">
-                {channels.map((channel) => (
+                {channels?.map((channel) => (
                   <Link
                     key={channel.id}
                     href={`/${params.workspaceId}/${channel.id}`}

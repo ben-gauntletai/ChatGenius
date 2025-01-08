@@ -43,6 +43,12 @@ export default function MessageList({
   const [newMessage, setNewMessage] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const currentChannelRef = useRef<string | undefined>(channelId)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<NodeJS.Timeout>();
+  const [isMouseOverPicker, setIsMouseOverPicker] = useState(false);
 
   // Fetch messages when channel changes
   useEffect(() => {
@@ -310,6 +316,65 @@ export default function MessageList({
       )
     )
   }
+
+  const handleEmojiButtonClick = () => {
+    if (!emojiButtonRef.current) return;
+    
+    const buttonRect = emojiButtonRef.current.getBoundingClientRect();
+    const windowHeight = window.innerHeight;
+    const windowWidth = window.innerWidth;
+    const pickerHeight = 400;
+    const pickerWidth = 350;
+
+    let top = buttonRect.bottom + window.scrollY;
+    let left = buttonRect.left + window.scrollX - pickerWidth;
+
+    if (buttonRect.bottom + pickerHeight > windowHeight) {
+      top = buttonRect.top + window.scrollY - pickerHeight;
+    }
+
+    if (left < 0) {
+      left = buttonRect.right + window.scrollX;
+    }
+
+    if (left + pickerWidth > windowWidth) {
+      left = windowWidth - pickerWidth - 20;
+    }
+
+    setPickerPosition({ top, left });
+    setShowEmojiPicker(true);
+  };
+
+  const handlePickerMouseEnter = () => {
+    setIsMouseOverPicker(true);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+  };
+
+  const handlePickerMouseLeave = () => {
+    setIsMouseOverPicker(false);
+    startCloseTimer();
+  };
+
+  const startCloseTimer = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      if (!isMouseOverPicker) {
+        setShowEmojiPicker(false);
+      }
+    }, 500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="flex-1 flex">
