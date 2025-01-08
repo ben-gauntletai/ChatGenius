@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react'
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronDown, Hash, MessageSquare, Trash2, Plus, LogOut } from 'lucide-react'
+import { ChevronDown, Hash, MessageSquare, Trash2, Plus, LogOut, Search } from 'lucide-react'
 import { useClerk } from "@clerk/nextjs"
 import MemberList from '@/components/workspace/member-list'
 import AddChannelModal from '@/components/modals/add-channel-modal'
 import DeleteChannelModal from '@/components/modals/delete-channel-modal'
 import DirectMessageList from '@/components/workspace/direct-message-list'
 import StatusDropdown from '@/components/status-dropdown'
+import SearchDropdown from '@/components/search/search-dropdown'
 
 interface Channel {
   id: string
@@ -29,6 +30,10 @@ export default function MainLayout({
   const [showAddChannel, setShowAddChannel] = useState(false)
   const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null)
   const [isChannelListExpanded, setIsChannelListExpanded] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false)
 
   const handleChannelAdded = async () => {
     setShowAddChannel(false)
@@ -62,6 +67,14 @@ export default function MainLayout({
     }
   }
 
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!searchQuery.trim()) return
+    
+    // Navigate to search results page
+    router.push(`/${params.workspaceId}/search?q=${encodeURIComponent(searchQuery)}`)
+  }
+
   useEffect(() => {
     const fetchChannels = async () => {
       try {
@@ -79,9 +92,41 @@ export default function MainLayout({
     }
   }, [params.workspaceId])
 
+  useEffect(() => {
+    const searchMessages = async () => {
+      if (!searchQuery.trim()) {
+        setSearchResults([])
+        return
+      }
+
+      setIsSearching(true)
+      try {
+        const response = await fetch(
+          `/api/workspaces/${params.workspaceId}/search?q=${encodeURIComponent(searchQuery)}`
+        )
+        
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Search failed')
+        }
+
+        const data = await response.json()
+        setSearchResults(data)
+      } catch (error) {
+        console.error('Search error:', error)
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }
+
+    const timeoutId = setTimeout(searchMessages, 300)
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery, params.workspaceId])
+
   return (
-    <div className="flex h-screen">
-      <div className="w-60 bg-[#3F0E40] text-white flex flex-col">
+    <div className="flex h-screen overflow-hidden">
+      <div className="w-60 bg-[#3F0E40] text-white flex flex-col overflow-hidden">
         <div className="p-4 border-b border-white/10">
           <h1 className="text-white font-bold text-lg">Your Workspace</h1>
           <div className="mt-2">
@@ -152,7 +197,39 @@ export default function MainLayout({
         </div>
       </div>
 
-      {children}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="h-20 border-b flex items-center px-4 bg-white">
+          <div className="max-w-3xl w-full mx-auto relative">
+            <form onSubmit={handleSearch} className="w-full">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setShowSearchDropdown(true)
+                  }}
+                  onFocus={() => setShowSearchDropdown(true)}
+                  placeholder="Search messages..."
+                  className="w-full bg-gray-100 text-gray-900 placeholder-gray-500 text-sm rounded px-3 py-3 pl-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <Search className="h-4 w-4 text-gray-400 absolute left-2 top-3.5" />
+              </div>
+            </form>
+            {showSearchDropdown && searchQuery.trim() && (
+              <SearchDropdown
+                results={searchResults}
+                isLoading={isSearching}
+                onClose={() => setShowSearchDropdown(false)}
+              />
+            )}
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-hidden">
+          {children}
+        </div>
+      </div>
 
       {showAddChannel && (
         <AddChannelModal
