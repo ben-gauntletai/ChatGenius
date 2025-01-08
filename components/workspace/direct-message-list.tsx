@@ -5,11 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { ChevronDown, MessageSquare } from 'lucide-react';
 import { useAuth } from '@clerk/nextjs';
+import { pusherClient } from '@/lib/pusher';
 
 interface DirectMessageUser {
   userId: string;
   userName: string;
   userImage: string;
+  status: string;
 }
 
 export default function DirectMessageList({ workspaceId }: { workspaceId: string }) {
@@ -20,22 +22,79 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
   const [isExpanded, setIsExpanded] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
+  const fetchMembers = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/workspaces/${workspaceId}/members`);
+      if (!response.ok) throw new Error('Failed to fetch members');
+      const data = await response.json();
+      
+      // Filter out current user
+      const filteredMembers = data.filter((member: DirectMessageUser) => 
+        member.userId !== currentUserId
+      );
+      
+      // Only update if there are actual status changes
+      setMembers(current => {
+        if (current.length === 0) return filteredMembers;
+        
+        const hasChanges = filteredMembers.some(newMember => {
+          const currentMember = current.find(m => m.userId === newMember.userId);
+          return !currentMember || currentMember.status !== newMember.status;
+        });
+        
+        return hasChanges ? filteredMembers : current;
+      });
+    } catch (error) {
+      console.error('Failed to fetch members:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchMembers = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
-        const data = await response.json();
-        // Filter out current user from the list
-        setMembers(data.filter((member: DirectMessageUser) => member.userId !== currentUserId));
-      } catch (error) {
-        console.error('Failed to fetch members:', error);
-      } finally {
-        setIsLoading(false);
-      }
+    let mounted = true;
+
+    const initializeMembers = async () => {
+      await fetchMembers();
+      
+      // Subscribe to status updates
+      const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
+      
+      channel.bind('member-status-update', (data: { userId: string; status: string }) => {
+        console.log('Received status update:', data);
+        if (mounted) {
+          setMembers(current => {
+            console.log('Current members:', current);
+            const updated = current.map(member => 
+              member.userId === data.userId 
+                ? { ...member, status: data.status }
+                : member
+            );
+            console.log('Updated members:', updated);
+            return updated;
+          });
+        }
+      });
+
+      // Refresh when tab becomes visible
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && mounted) {
+          fetchMembers();
+        }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        mounted = false;
+        channel.unbind('member-status-update');
+        pusherClient.unsubscribe(`workspace-${workspaceId}`);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
     };
 
-    fetchMembers();
+    initializeMembers();
   }, [workspaceId, currentUserId]);
 
   const handleUserClick = (userId: string) => {
@@ -64,18 +123,24 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
               <button
                 key={member.userId}
                 onClick={() => handleUserClick(member.userId)}
-                className={`w-full flex items-center gap-2 rounded px-2 py-[6px] hover:bg-white/10 transition-colors ${
-                  params.userId === member.userId ? 'bg-white/10' : ''
+                className={`w-full flex items-center gap-3 rounded px-2 py-2 hover:bg-white/10 transition-colors ${
+                  params?.userId === member.userId ? 'bg-white/10' : ''
                 }`}
               >
-                <div className="flex-shrink-0 w-5 h-5 relative">
+                <div className="flex-shrink-0 w-8 h-8 relative">
                   <Image
                     src={member.userImage}
                     alt={member.userName}
-                    width={20}
-                    height={20}
+                    width={32}
+                    height={32}
                     className="rounded-sm object-cover"
                   />
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#3F0E40] ${
+                    member.status === 'ONLINE' ? 'bg-green-500' :
+                    member.status === 'AWAY' ? 'bg-yellow-500' :
+                    member.status === 'BUSY' ? 'bg-red-500' :
+                    'bg-gray-500'
+                  }`} />
                 </div>
                 <span className="text-white/70 text-[15px] truncate flex-1 text-left">
                   {member.userName}

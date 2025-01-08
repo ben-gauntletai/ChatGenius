@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
-import { pusherServer } from '@/utils/pusher'
-import { UserStatus } from '@prisma/client'
+import { pusherServer } from '@/lib/pusher'
 
 export async function PATCH(
   req: Request,
@@ -10,68 +9,42 @@ export async function PATCH(
 ) {
   try {
     const { userId } = auth()
+    const { status } = await req.json()
+
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const { status } = await req.json()
-    console.log('\n--- Status Update Request ---')
-    console.log('User ID:', userId)
-    console.log('Workspace ID:', params.workspaceId)
-    console.log('Requested Status:', status)
-
-    // Validate status value
-    if (!Object.values(UserStatus).includes(status.toUpperCase() as UserStatus)) {
-      console.error('Invalid status value:', status)
-      return new NextResponse('Invalid status value', { status: 400 })
+    // Validate status
+    const validStatuses = ['ONLINE', 'AWAY', 'BUSY', 'OFFLINE']
+    if (!validStatuses.includes(status)) {
+      return new NextResponse('Invalid status', { status: 400 })
     }
 
-    const statusEnum = status.toUpperCase() as UserStatus
-
-    // Changed from findUnique to findFirst
-    const member = await prisma.workspaceMember.findFirst({
+    // Update both status and lastManualStatus
+    const member = await prisma.workspaceMember.update({
       where: {
-        userId: userId,
-        workspaceId: params.workspaceId
-      }
-    })
-
-    console.log('\n--- Found Member ---')
-    console.log(member)
-
-    if (!member) {
-      console.error('\n--- Member Not Found ---')
-      console.error('Cannot find member with:')
-      console.error(`- User ID: ${userId}`)
-      console.error(`- Workspace ID: ${params.workspaceId}`)
-      return new NextResponse('Member not found', { status: 404 })
-    }
-
-    // Update the status using the member's id
-    const updatedMember = await prisma.workspaceMember.update({
-      where: {
-        id: member.id
+        workspaceId_userId: {
+          workspaceId: params.workspaceId,
+          userId: userId,
+        },
       },
-      data: { 
-        status: statusEnum,
-        statusUpdatedAt: new Date()
-      }
+      data: {
+        status: status,
+        lastManualStatus: status, // Using the correct field name
+      },
     })
 
-    console.log('\n--- Updated Member ---')
-    console.log(updatedMember)
-
-    // Broadcast status change
-    await pusherServer.trigger(
+    // Broadcast the status update
+    pusherServer.trigger(
       `workspace-${params.workspaceId}`,
       'member-status-update',
-      { userId, status: statusEnum }
+      { userId, status }
     )
 
-    return NextResponse.json(updatedMember)
+    return NextResponse.json(member)
   } catch (error) {
-    console.error('\n--- Error in Status Update ---')
-    console.error('Error details:', error)
-    return new NextResponse(`Internal Error: ${error.message}`, { status: 500 })
+    console.error('[STATUS_UPDATE]', error)
+    return new NextResponse('Internal Error', { status: 500 })
   }
 } 

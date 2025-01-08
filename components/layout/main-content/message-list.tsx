@@ -372,7 +372,7 @@ export default function MessageList({
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
-      }
+    }
     };
   }, []);
 
@@ -382,10 +382,10 @@ export default function MessageList({
         <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col min-h-full justify-end">
             <div className="flex-1" />
-            <div>
-              {messages.map((message) => (
-                <Message
-                  key={message.id}
+      <div>
+        {messages.map((message) => (
+          <Message
+            key={message.id}
                   {...message}
                   isThreadReply={false}
                   isDM={isDM}
@@ -394,10 +394,10 @@ export default function MessageList({
                   onReact={handleReact}
                   onRemoveReaction={handleRemoveReaction}
                   onThreadClick={isDM ? undefined : () => handleThreadClick(message)}
-                />
-              ))}
-              <div ref={bottomRef} />
-            </div>
+          />
+        ))}
+        <div ref={bottomRef} />
+      </div>
           </div>
         </div>
 

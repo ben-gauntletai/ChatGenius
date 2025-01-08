@@ -126,7 +126,7 @@ export default function MainLayout({
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <div className="w-60 bg-[#3F0E40] text-white flex flex-col overflow-hidden">
+      <div className="w-72 bg-[#3F0E40] text-white flex flex-col overflow-hidden">
         <div className="p-4 border-b border-white/10">
           <h1 className="text-white font-bold text-lg">Your Workspace</h1>
           <div className="mt-2">

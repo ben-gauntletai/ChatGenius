@@ -34,20 +34,18 @@ model Workspace {
 }
 
 model WorkspaceMember {
-  id          String    @id @default(cuid())
-  userId      String
-  userName    String
-  userImage   String
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  role        Role      @default(MEMBER)
-  status      UserStatus @default(ONLINE)
-  statusUpdatedAt DateTime @default(now())
-  joinedAt    DateTime  @default(now())
+  id              String    @id @default(cuid())
+  userId          String
+  userName        String
+  userImage       String
+  workspaceId     String
+  role            Role      @default(MEMBER)
+  status          String    @default("ONLINE")
+  lastManualStatus String?
+  joinedAt        DateTime  @default(now())
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, workspaceId])
-  @@index([workspaceId])
-  @@index([userId])
+  @@unique([workspaceId, userId])
 }
 
 model Channel {

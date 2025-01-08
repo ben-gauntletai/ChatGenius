@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth, currentUser } from '@clerk/nextjs';
+import { auth, clerkClient } from '@clerk/nextjs';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
@@ -8,6 +8,9 @@ export async function GET(
 ) {
   try {
     console.log('\n=== Fetching Members ===');
+    const { userId: currentUserId } = auth();
+
+    // First get members with their stored status
     const members = await prisma.workspaceMember.findMany({
       where: {
         workspaceId: params.workspaceId,
@@ -18,17 +21,58 @@ export async function GET(
         userName: true,
         userImage: true,
         role: true,
-        status: true,        // Explicitly include status
-        statusUpdatedAt: true,  // Include statusUpdatedAt
-        joinedAt: true
-      },
-      orderBy: {
-        joinedAt: 'asc',
-      },
+        status: true,
+        lastManualStatus: true
+      }
     });
 
-    console.log('Members with status:', members);
-    return NextResponse.json(members);
+    // Get active users from Clerk
+    const activeUsers = await Promise.all(
+      members.map(async member => {
+        try {
+          const user = await clerkClient.users.getUser(member.userId);
+          // Check if user is signed out
+          const isSignedOut = !user.lastSignInAt || 
+            (user.lastSignOutAt && new Date(user.lastSignOutAt) > new Date(user.lastSignInAt));
+          
+          return {
+            userId: member.userId,
+            isActive: !isSignedOut
+          };
+        } catch (error) {
+          console.error(`Failed to get user ${member.userId}:`, error);
+          return { 
+            userId: member.userId, 
+            isActive: false
+          };
+        }
+      })
+    );
+
+    const activeUsersMap = new Map(activeUsers.map(user => [user.userId, user]));
+
+    // Update member statuses
+    const updatedMembers = members.map(member => {
+      const userInfo = activeUsersMap.get(member.userId);
+      const isCurrentUser = member.userId === currentUserId;
+
+      // If user is signed in or is current user, use their last manual status
+      if (userInfo?.isActive || isCurrentUser) {
+        return {
+          ...member,
+          status: member.lastManualStatus || member.status
+        };
+      }
+
+      // If user is not active, set to OFFLINE
+      return {
+        ...member,
+        status: 'OFFLINE'
+      };
+    });
+
+    console.log('Members with status:', updatedMembers);
+    return NextResponse.json(updatedMembers);
   } catch (error) {
     console.error('[MEMBERS_GET]', error);
     return new NextResponse('Internal Error', { status: 500 });
