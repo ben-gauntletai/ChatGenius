@@ -288,14 +288,9 @@ export default function Message({
           </div>
         ) : (
           <>
-            {content && (
-              <p className="text-[15px] text-gray-900 mt-1">{content}</p>
-            )}
-            
+            <p className="mt-1">{content}</p>
             {fileUrl && fileName && (
-              <div className="mt-2">
-                <FileAttachment fileName={fileName} fileUrl={fileUrl} />
-              </div>
+              <FileAttachment fileName={fileName} fileUrl={fileUrl} />
             )}
             
             <div className="flex flex-wrap gap-1 mt-1">

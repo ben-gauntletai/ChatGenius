@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
+import { auth, currentUser } from '@clerk/nextjs';
 import { prisma } from '@/lib/prisma';
+import { pusherServer } from '@/utils/pusher';
 
 export async function GET(
   req: Request,
@@ -52,6 +53,49 @@ export async function GET(
     return NextResponse.json(formattedMessages);
   } catch (error) {
     console.error('[CHANNEL_MESSAGES_GET]', error);
+    return new NextResponse('Internal Error', { status: 500 });
+  }
+}
+
+export async function POST(
+  req: Request,
+  { params }: { params: { channelId: string } }
+) {
+  try {
+    const { userId } = auth();
+    const user = await currentUser();
+    const { content, workspaceId, url, name, type } = await req.json();
+
+    if (!userId || !user) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+
+    const message = await prisma.message.create({
+      data: {
+        content,
+        fileUrl: url || null,
+        fileName: name || null,
+        fileType: type || null,
+        userId,
+        userName: `${user.firstName} ${user.lastName}`,
+        userImage: user.imageUrl,
+        channelId: params.channelId,
+        workspaceId
+      },
+      include: {
+        reactions: true
+      }
+    });
+
+    await pusherServer.trigger(
+      `channel-${params.channelId}`,
+      'new-message',
+      message
+    );
+
+    return NextResponse.json(message);
+  } catch (error) {
+    console.error('[MESSAGES_POST]', error);
     return new NextResponse('Internal Error', { status: 500 });
   }
 } 
