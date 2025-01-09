@@ -6,12 +6,14 @@ import Image from 'next/image';
 import { ChevronDown, MessageSquare } from 'lucide-react';
 import { useAuth } from '@clerk/nextjs';
 import { pusherClient } from '@/lib/pusher';
+import DefaultAvatar from '@/components/ui/default-avatar';
 
 interface DirectMessageUser {
   userId: string;
   userName: string;
   userImage: string;
   status: string;
+  hasImage: boolean;
 }
 
 interface Member {
@@ -133,12 +135,10 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
                 }`}
               >
                 <div className="flex-shrink-0 w-8 h-8 relative">
-                  <Image
-                    src={member.userImage}
-                    alt={member.userName}
-                    width={32}
-                    height={32}
-                    className="rounded-sm object-cover"
+                  <DefaultAvatar
+                    userId={member.userId}
+                    name={member.userName}
+                    className="w-full h-full rounded-sm text-xs"
                   />
                   <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#3F0E40] ${
                     member.status === 'ONLINE' ? 'bg-green-500' :

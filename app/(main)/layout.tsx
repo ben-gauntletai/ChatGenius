@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react'
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronDown, Hash, MessageSquare, Trash2, Plus, LogOut, Search } from 'lucide-react'
-import { useClerk } from "@clerk/nextjs"
+import { useClerk, useAuth } from "@clerk/nextjs"
 import MemberList from '@/components/workspace/member-list'
 import AddChannelModal from '@/components/modals/add-channel-modal'
 import DeleteChannelModal from '@/components/modals/delete-channel-modal'
 import DirectMessageList from '@/components/workspace/direct-message-list'
 import StatusDropdown from '@/components/status-dropdown'
 import SearchDropdown from '@/components/search/search-dropdown'
+import UserProfile from '@/components/layout/sidebar/user-profile'
 
 interface Channel {
   id: string
@@ -26,6 +27,7 @@ export default function MainLayout({
   const pathname = usePathname()
   const router = useRouter()
   const { signOut } = useClerk()
+  const { userId } = useAuth()
   const [channels, setChannels] = useState<Channel[]>([])
   const [showAddChannel, setShowAddChannel] = useState(false)
   const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null)
@@ -34,6 +36,26 @@ export default function MainLayout({
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
+  const [currentStatus, setCurrentStatus] = useState('ONLINE')
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch(`/api/workspaces/${params.workspaceId}/members`);
+        const members = await response.json();
+        const currentMember = members.find((m: any) => m.userId === userId);
+        if (currentMember?.status) {
+          setCurrentStatus(currentMember.status);
+        }
+      } catch (error) {
+        console.error('Error fetching status:', error);
+      }
+    };
+
+    if (params.workspaceId && userId) {
+      fetchStatus();
+    }
+  }, [params.workspaceId, userId]);
 
   const handleChannelAdded = async () => {
     setShowAddChannel(false)
@@ -190,14 +212,12 @@ export default function MainLayout({
           </div>
         </div>
 
-        <div className="p-4 border-t border-white/10">
-          <button
-            onClick={() => signOut()}
-            className="w-full flex items-center text-white/70 hover:text-white/90"
-          >
-            <LogOut className="h-5 w-5 mr-2" />
-            Sign out
-          </button>
+        <div className="p-4">
+          <UserProfile 
+            workspaceId={params.workspaceId} 
+            status={currentStatus} 
+            onSignOut={() => signOut()} 
+          />
         </div>
       </div>
 

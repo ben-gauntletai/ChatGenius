@@ -35,13 +35,15 @@ export async function GET(
           
           return {
             userId: member.userId,
-            isActive: !isSignedOut
+            isActive: !isSignedOut,
+            hasImage: user.hasImage
           };
         } catch (error) {
           console.error(`Failed to get user ${member.userId}:`, error);
           return { 
             userId: member.userId, 
-            isActive: false
+            isActive: false,
+            hasImage: false
           };
         }
       })
@@ -58,14 +60,16 @@ export async function GET(
       if (userInfo?.isActive || isCurrentUser) {
         return {
           ...member,
-          status: member.status
+          status: member.status,
+          hasImage: userInfo?.hasImage || false
         };
       }
 
       // If user is not active, set to OFFLINE
       return {
         ...member,
-        status: 'OFFLINE'
+        status: 'OFFLINE',
+        hasImage: userInfo?.hasImage || false
       };
     });
 

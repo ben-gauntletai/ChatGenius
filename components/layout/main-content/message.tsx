@@ -7,6 +7,7 @@ import { useAuth } from '@clerk/nextjs'
 import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
 import { Message as MessageType, Reaction } from '@/types'
+import DefaultAvatar from '@/components/ui/default-avatar'
 
 type MessageProps = MessageType & {
   onDelete: (messageId: string) => void
@@ -243,11 +244,10 @@ export default function Message({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="relative w-10 h-10 flex-shrink-0">
-        <Image
-          src={userImage}
-          alt={userName}
-          fill
-          className="rounded-md object-cover"
+        <DefaultAvatar
+          userId={userId}
+          name={userName}
+          className="w-full h-full rounded-md"
         />
       </div>
       <div className="flex-1 min-w-0">

@@ -67,10 +67,13 @@ export default async function DirectMessagePage({
 
   return (
     <div className="flex flex-col h-full">
-      <DirectMessageHeader 
-        userName={otherUser.userName}
-        userImage={otherUser.userImage}
-      />
+      <div className="flex-1 flex flex-col">
+        <DirectMessageHeader
+          userId={otherUser.userId}
+          userName={otherUser.userName}
+          status={otherUser.status}
+        />
+      </div>
       <MessageList 
         initialMessages={formattedMessages}
         isDM={true}
