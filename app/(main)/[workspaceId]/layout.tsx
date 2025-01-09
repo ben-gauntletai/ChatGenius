@@ -20,7 +20,7 @@ export default async function WorkspaceLayout({
   console.log('User ID:', userId)
   console.log('Workspace ID:', params.workspaceId)
 
-  // Find existing member and their status
+  // Find existing member
   const existingMember = await prisma.workspaceMember.findFirst({
     where: {
       userId: userId,
@@ -40,25 +40,18 @@ export default async function WorkspaceLayout({
   try {
     const updatedMember = await prisma.workspaceMember.upsert({
       where: {
-        userId_workspaceId: {
-          userId: userId,
-          workspaceId: params.workspaceId
-        }
+        id: existingMember?.id || ''
       },
       update: {
-        userName: `${user.firstName} ${user.lastName}`,
-        userImage: user.imageUrl,
-        ...(existingMember && {
-          status: existingMember.status
-        })
+        status: 'ONLINE'
       },
       create: {
         userId: userId,
-        userName: `${user.firstName} ${user.lastName}`,
-        userImage: user.imageUrl,
         workspaceId: params.workspaceId,
-        role: 'MEMBER',
-        status: 'ONLINE'
+        userName: user.firstName + ' ' + user.lastName,
+        userImage: user.imageUrl,
+        status: 'ONLINE',
+        role: 'MEMBER'
       }
     })
 
