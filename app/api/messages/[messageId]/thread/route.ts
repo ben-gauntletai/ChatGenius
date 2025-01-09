@@ -44,76 +44,40 @@ export async function POST(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    let thread;
-    let reply;
-
     if (isDM) {
-      // Handle DM thread
-      const parentMessage = await prisma.directMessage.findUnique({
-        where: { id: params.messageId },
-        include: { thread: true }
-      })
-
-      if (!parentMessage) {
-        return new NextResponse('Message not found', { status: 404 })
-      }
-
-      // Create or get thread
-      thread = parentMessage.thread || await prisma.thread.create({
-        data: {
-          directMessageId: params.messageId
-        }
-      })
-
-      // Create DM reply
-      reply = await prisma.directMessage.create({
-        data: {
-          content,
-          workspaceId,
-          senderId: userId,
-          senderName: `${user.firstName} ${user.lastName}`,
-          senderImage: user.imageUrl,
-          receiverId: parentMessage.senderId === userId ? parentMessage.receiverId : parentMessage.senderId,
-          receiverName: parentMessage.senderId === userId ? parentMessage.receiverName : parentMessage.senderName,
-          receiverImage: parentMessage.senderId === userId ? parentMessage.receiverImage : parentMessage.senderImage,
-          threadId: thread.id
-        },
-        include: {
-          reactions: true
-        }
-      })
-    } else {
-      // Handle regular message thread
-      const parentMessage = await prisma.message.findUnique({
-        where: { id: params.messageId },
-        include: { thread: true }
-      })
-
-      if (!parentMessage) {
-        return new NextResponse('Message not found', { status: 404 })
-      }
-
-      thread = parentMessage.thread || await prisma.thread.create({
-        data: {
-          messageId: params.messageId
-        }
-      })
-
-      reply = await prisma.message.create({
-        data: {
-          content,
-          channelId: parentMessage.channelId,
-          workspaceId,
-          userId,
-          userName: `${user.firstName} ${user.lastName}`,
-          userImage: user.imageUrl,
-          threadId: thread.id
-        },
-        include: {
-          reactions: true
-        }
-      })
+      return new NextResponse('Threads are not supported for direct messages', { status: 400 })
     }
+
+    // Handle regular message thread
+    const parentMessage = await prisma.message.findUnique({
+      where: { id: params.messageId },
+      include: { thread: true }
+    })
+
+    if (!parentMessage) {
+      return new NextResponse('Message not found', { status: 404 })
+    }
+
+    const thread = parentMessage.thread || await prisma.thread.create({
+      data: {
+        messageId: params.messageId
+      }
+    })
+
+    const reply = await prisma.message.create({
+      data: {
+        content,
+        channelId: parentMessage.channelId,
+        workspaceId,
+        userId,
+        userName: `${user.firstName} ${user.lastName}`,
+        userImage: user.imageUrl,
+        threadId: thread.id
+      },
+      include: {
+        reactions: true
+      }
+    })
 
     await pusherServer.trigger(
       `thread-${thread.id}`,
