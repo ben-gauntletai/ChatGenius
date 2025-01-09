@@ -18,7 +18,7 @@ interface SearchDropdownProps {
 
 export default function SearchDropdown({ results, isLoading, onClose }: SearchDropdownProps) {
   const router = useRouter()
-  const params = useParams()
+  const params = useParams() as { workspaceId: string }
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

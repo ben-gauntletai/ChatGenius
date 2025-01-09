@@ -21,7 +21,7 @@ interface Member {
 
 export default function DirectMessageList({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
-  const params = useParams();
+  const params = useParams() as { workspaceId: string; userId?: string };
   const { userId: currentUserId } = useAuth();
   const [members, setMembers] = useState<DirectMessageUser[]>([]);
   const [isExpanded, setIsExpanded] = useState(true);
