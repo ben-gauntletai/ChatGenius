@@ -1,4 +1,8 @@
-export default function ChannelHeader({ name }: { name: string }) {
+interface ChannelHeaderProps {
+  name: string;
+}
+
+export default function ChannelHeader({ name }: ChannelHeaderProps) {
   return (
     <div className="px-6 py-4 border-b">
       <div className="flex items-center">
