@@ -49,18 +49,14 @@ export default async function Home() {
   try {
     const member = await prisma.workspaceMember.upsert({
       where: {
-        userId_workspaceId: {
-          userId: userId,
-          workspaceId: defaultWorkspace.id
-        }
+        id: existingMember?.id || ''
       },
       update: {
         userName: `${user.firstName} ${user.lastName}`,
         userImage: user.imageUrl,
         // Keep existing status if member exists
         ...(existingMember && {
-          status: existingMember.status,
-          statusUpdatedAt: existingMember.statusUpdatedAt
+          status: existingMember.status
         })
       },
       create: {
@@ -69,14 +65,12 @@ export default async function Home() {
         userImage: user.imageUrl,
         workspaceId: defaultWorkspace.id,
         role: 'MEMBER',
-        status: 'ONLINE',
-        statusUpdatedAt: new Date()
+        status: 'ONLINE'
       }
     })
 
     console.log('\n=== Updated Member Status ===')
     console.log('Current Status:', member.status)
-    console.log('Status Last Updated:', member.statusUpdatedAt)
   } catch (error) {
     console.error('Error upserting member:', error)
   }

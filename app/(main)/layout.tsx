@@ -22,7 +22,7 @@ export default function MainLayout({
 }: {
   children: React.ReactNode
 }) {
-  const params = useParams()
+  const params = useParams() as { workspaceId: string };
   const pathname = usePathname()
   const router = useRouter()
   const { signOut } = useClerk()

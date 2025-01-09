@@ -8,44 +8,31 @@ export async function POST(req: Request) {
     const { userId: currentUserId } = auth();
     const { userId } = await req.json();
     
-    console.log('Sign out request received for user:', userId);
-
-    // Security check
     if (!currentUserId || currentUserId !== userId) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    // Find all workspaces the user is a member of
-    const workspaceMembers = await prisma.workspaceMember.findMany({
-      where: {
-        userId
-      },
-      select: {
-        id: true,
-        workspaceId: true
-      }
+    // First update all memberships
+    await prisma.workspaceMember.updateMany({
+      where: { userId },
+      data: { status: 'OFFLINE' }
     });
 
-    // Update all memberships in a single transaction
-    await prisma.$transaction([
-      // Update all workspace members to OFFLINE
-      prisma.workspaceMember.updateMany({
-        where: {
-          userId
-        },
-        data: {
-          status: 'OFFLINE'
-        }
-      }),
-      // Send Pusher notifications
-      ...workspaceMembers.map(member => 
+    // Then get workspaces and send notifications
+    const workspaceMembers = await prisma.workspaceMember.findMany({
+      where: { userId },
+      select: { workspaceId: true }
+    });
+
+    await Promise.all(
+      workspaceMembers.map(member => 
         pusherServer.trigger(
           `workspace-${member.workspaceId}`,
           'member-status-update',
           { userId, status: 'OFFLINE' }
         )
       )
-    ]);
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -14,6 +14,11 @@ interface DirectMessageUser {
   status: string;
 }
 
+interface Member {
+  userId: string;
+  status: string;
+}
+
 export default function DirectMessageList({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   const params = useParams();
@@ -38,7 +43,7 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
       setMembers(current => {
         if (current.length === 0) return filteredMembers;
         
-        const hasChanges = filteredMembers.some(newMember => {
+        const hasChanges = filteredMembers.some((newMember: Member) => {
           const currentMember = current.find(m => m.userId === newMember.userId);
           return !currentMember || currentMember.status !== newMember.status;
         });
@@ -124,7 +129,7 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
                 key={member.userId}
                 onClick={() => handleUserClick(member.userId)}
                 className={`w-full flex items-center gap-3 rounded px-2 py-2 hover:bg-white/10 transition-colors ${
-                  params?.userId === member.userId ? 'bg-white/10' : ''
+                  (params as { userId?: string })?.userId === member.userId ? 'bg-white/10' : ''
                 }`}
               >
                 <div className="flex-shrink-0 w-8 h-8 relative">

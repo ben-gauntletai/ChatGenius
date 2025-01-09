@@ -9,7 +9,6 @@ import { useAuth } from '@clerk/nextjs';
 interface Member {
   userId: string;
   status: string;
-  statusUpdatedAt: string;
 }
 
 interface WorkspaceHeaderProps {
@@ -20,9 +19,9 @@ export default function WorkspaceHeader({ name }: WorkspaceHeaderProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const params = useParams();
+  const params = useParams() as { workspaceId: string };
   const { userId } = useAuth();
-  const workspaceId = params.workspaceId as string;
+  const workspaceId = params.workspaceId;
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -40,7 +39,7 @@ export default function WorkspaceHeader({ name }: WorkspaceHeaderProps) {
         const members = await response.json();
         console.log('WorkspaceHeader - All members:', members);
         
-        const currentMember = members.find(m => m.userId === userId);
+        const currentMember = members.find((m: Member) => m.userId === userId);
         console.log('WorkspaceHeader - Current member:', currentMember);
         
         if (currentMember?.status) {

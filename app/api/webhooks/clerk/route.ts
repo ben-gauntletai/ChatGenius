@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   }
 
   // Handle the event
-  if (evt.type === 'user.signout') {
+  if (evt.type === 'session.ended') {
     const { user_id } = evt.data;
 
     // Update all workspace memberships for this user to OFFLINE

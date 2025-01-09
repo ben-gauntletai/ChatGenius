@@ -6,21 +6,7 @@ import { pusherClient } from '@/lib/pusher'
 import Message from './message'
 import Thread from './thread'
 import { PaperclipIcon, X } from 'lucide-react'
-
-interface Message {
-  id: string
-  content: string
-  createdAt: Date
-  userId: string
-  userName: string
-  userImage: string
-  channelId?: string
-  reactions: any[]
-  fileUrl?: string
-  fileName?: string
-  fileType?: string
-  replyCount?: number
-}
+import { Message as MessageType, Reaction } from '@/types'
 
 export default function MessageList({ 
   initialMessages = [],
@@ -29,15 +15,15 @@ export default function MessageList({
   isDM = false,
   otherUserId
 }: { 
-  initialMessages: Message[]
+  initialMessages: MessageType[]
   channelId?: string
   workspaceId?: string
   isDM?: boolean
   otherUserId?: string
 }) {
   const { userId } = useAuth()
-  const [messages, setMessages] = useState<Message[]>(initialMessages)
-  const [activeThread, setActiveThread] = useState<Message | null>(null)
+  const [messages, setMessages] = useState<MessageType[]>(initialMessages)
+  const [activeThread, setActiveThread] = useState<MessageType | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [newMessage, setNewMessage] = useState('')
@@ -88,7 +74,7 @@ export default function MessageList({
     const channel = pusherClient.subscribe(channelName);
 
     // Bind events
-    const newMessageHandler = (message: Message) => {
+    const newMessageHandler = (message: MessageType) => {
       setMessages(current => {
         if (current.some(m => m.id === message.id)) return current;
         return [...current, message];
@@ -96,7 +82,7 @@ export default function MessageList({
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    const updateMessageHandler = (updatedMessage: Message) => {
+    const updateMessageHandler = (updatedMessage: MessageType) => {
       setMessages(current =>
         current.map(message =>
           message.id === updatedMessage.id ? updatedMessage : message
@@ -386,14 +372,24 @@ export default function MessageList({
         {messages.map((message) => (
           <Message
             key={message.id}
-                  {...message}
-                  isThreadReply={false}
-                  isDM={isDM}
-                  onDelete={handleDelete}
-                  onEdit={handleEdit}
-                  onReact={handleReact}
-                  onRemoveReaction={handleRemoveReaction}
-                  onThreadClick={isDM ? undefined : () => handleThreadClick(message)}
+            id={message.id}
+            content={message.content}
+            userName={message.userName}
+            userImage={message.userImage}
+            createdAt={message.createdAt}
+            userId={message.userId}
+            channelId={message.channelId}
+            reactions={message.reactions}
+            fileUrl={message.fileUrl ?? undefined}
+            fileName={message.fileName ?? undefined}
+            fileType={message.fileType ?? undefined}
+            isThreadReply={false}
+            isDM={isDM}
+            onDelete={handleDelete}
+            onEdit={handleEdit}
+            onReact={handleReact}
+            onRemoveReaction={handleRemoveReaction}
+            onThreadClick={isDM ? undefined : () => handleThreadClick(message)}
           />
         ))}
         <div ref={bottomRef} />

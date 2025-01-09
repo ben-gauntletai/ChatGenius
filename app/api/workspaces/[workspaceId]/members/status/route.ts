@@ -21,19 +21,27 @@ export async function PATCH(
       return new NextResponse('Invalid status', { status: 400 })
     }
 
-    // Update both status and lastManualStatus
+    // Find the member first
+    const existingMember = await prisma.workspaceMember.findFirst({
+      where: {
+        workspaceId: params.workspaceId,
+        userId: userId
+      }
+    });
+
+    if (!existingMember) {
+      return new NextResponse('Member not found', { status: 404 });
+    }
+
+    // Update the member
     const member = await prisma.workspaceMember.update({
       where: {
-        workspaceId_userId: {
-          workspaceId: params.workspaceId,
-          userId: userId,
-        },
+        id: existingMember.id
       },
       data: {
-        status: status,
-        lastManualStatus: status, // Using the correct field name
-      },
-    })
+        status: status
+      }
+    });
 
     // Broadcast the status update
     pusherServer.trigger(

@@ -5,14 +5,15 @@ import { X } from 'lucide-react'
 import Message from './message'
 import { useAuth } from '@clerk/nextjs'
 import { pusherClient } from '@/lib/pusher'
+import { Message as MessageType } from '@/types'
 
 interface ThreadProps {
-  isOpen: boolean
-  onClose: () => void
-  parentMessage: any
-  channelId: string
-  workspaceId: string
-  onReplyCountChange?: (messageId: string, newCount: number) => void
+  isOpen: boolean;
+  onClose: () => void;
+  parentMessage: MessageType;
+  channelId?: string;
+  workspaceId?: string;
+  onReplyCountChange?: (messageId: string, newCount: number) => void;
 }
 
 export default function Thread({
@@ -24,7 +25,7 @@ export default function Thread({
   onReplyCountChange
 }: ThreadProps) {
   const { userId } = useAuth()
-  const [replies, setReplies] = useState<any[]>([])
+  const [replies, setReplies] = useState<MessageType[]>([])
   const [newReply, setNewReply] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [localParentMessage, setLocalParentMessage] = useState(parentMessage)
@@ -216,7 +217,7 @@ export default function Thread({
       if (!response.ok) throw new Error('Failed to add reaction')
       
       const updatedMessage = await response.json()
-      setLocalParentMessage(current => ({
+      setLocalParentMessage((current: MessageType) => ({
         ...current,
         reactions: updatedMessage.reactions
       }))
@@ -234,7 +235,7 @@ export default function Thread({
       if (!response.ok) throw new Error('Failed to remove reaction')
       
       const updatedMessage = await response.json()
-      setLocalParentMessage(current => ({
+      setLocalParentMessage((current: MessageType) => ({
         ...current,
         reactions: updatedMessage.reactions
       }))
@@ -274,7 +275,7 @@ export default function Thread({
       }
 
       const updatedMessage = await response.json()
-      setLocalParentMessage(current => ({
+      setLocalParentMessage((current: MessageType) => ({
         ...current,
         content: updatedMessage.content,
         isEdited: true

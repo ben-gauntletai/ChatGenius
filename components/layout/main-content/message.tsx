@@ -6,25 +6,14 @@ import { Pencil, Trash2, X, Check, Smile, SmilePlus, PaperclipIcon, MessageSquar
 import { useAuth } from '@clerk/nextjs'
 import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
+import { Message as MessageType, Reaction } from '@/types'
 
-interface MessageProps {
-  id: string
-  content: string
-  userName: string
-  userImage: string
-  createdAt: Date | string
-  userId: string
-  channelId?: string
-  reactions: any[]
-  fileUrl?: string
-  fileName?: string
-  fileType?: string
+type MessageProps = MessageType & {
   onDelete: (messageId: string) => void
   onEdit: (messageId: string, newContent: string) => void
   onReact: (messageId: string, emoji: string) => void
   onRemoveReaction: (messageId: string, reactionId: string) => void
   onThreadClick?: () => void
-  replyCount?: number
   isThreadReply?: boolean
   isDM?: boolean
   conversationId?: boolean

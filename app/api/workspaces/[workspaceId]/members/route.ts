@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth, clerkClient } from '@clerk/nextjs';
+import { auth, clerkClient, currentUser } from '@clerk/nextjs';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
@@ -21,8 +21,7 @@ export async function GET(
         userName: true,
         userImage: true,
         role: true,
-        status: true,
-        lastManualStatus: true
+        status: true
       }
     });
 
@@ -32,8 +31,7 @@ export async function GET(
         try {
           const user = await clerkClient.users.getUser(member.userId);
           // Check if user is signed out
-          const isSignedOut = !user.lastSignInAt || 
-            (user.lastSignOutAt && new Date(user.lastSignOutAt) > new Date(user.lastSignInAt));
+          const isSignedOut = !user.lastSignInAt;
           
           return {
             userId: member.userId,
@@ -60,7 +58,7 @@ export async function GET(
       if (userInfo?.isActive || isCurrentUser) {
         return {
           ...member,
-          status: member.lastManualStatus || member.status
+          status: member.status
         };
       }
 
@@ -124,8 +122,7 @@ export async function POST(
         userImage: user.imageUrl,
         workspaceId: params.workspaceId,
         role: 'MEMBER',
-        status: 'ONLINE',  // Default status for new members
-        statusUpdatedAt: new Date(),
+        status: 'ONLINE'  // Default status for new members
       },
     });
 

@@ -17,8 +17,7 @@ export async function updateUserStatusOnSignOut(userId: string) {
         id: member.id
       },
       data: {
-        status: 'OFFLINE',
-        lastManualStatus: 'OFFLINE'
+        status: 'OFFLINE'
       }
     });
 

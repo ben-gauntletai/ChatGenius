@@ -32,7 +32,6 @@ export default async function WorkspaceLayout({
   if (existingMember) {
     console.log('Member Found:')
     console.log('Status:', existingMember.status)
-    console.log('Last Updated:', existingMember.statusUpdatedAt)
   } else {
     console.log('No existing member found')
   }
@@ -50,8 +49,7 @@ export default async function WorkspaceLayout({
         userName: `${user.firstName} ${user.lastName}`,
         userImage: user.imageUrl,
         ...(existingMember && {
-          status: existingMember.status,
-          statusUpdatedAt: existingMember.statusUpdatedAt
+          status: existingMember.status
         })
       },
       create: {
@@ -60,14 +58,12 @@ export default async function WorkspaceLayout({
         userImage: user.imageUrl,
         workspaceId: params.workspaceId,
         role: 'MEMBER',
-        status: 'ONLINE',
-        statusUpdatedAt: new Date()
+        status: 'ONLINE'
       }
     })
 
     console.log('\n=== Updated Member Info ===')
     console.log('Current Status:', updatedMember.status)
-    console.log('Status Last Updated:', updatedMember.statusUpdatedAt)
   } catch (error) {
     console.error('\n=== Error Updating Member ===', error)
   }
