@@ -164,6 +164,32 @@ export default function Message({
     }
   };
 
+  const renderTextWithLinks = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    
+    return (
+      <>
+        {parts.map((part, index) => {
+          if (part.match(urlRegex)) {
+            return (
+              <a
+                key={index}
+                href={part}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline break-all"
+              >
+                {part}
+              </a>
+            );
+          }
+          return <span key={index}>{part}</span>;
+        })}
+      </>
+    );
+  };
+
   const FileAttachment = ({ fileName, fileUrl }: { fileName: string, fileUrl: string }) => {
     const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName.toLowerCase())
     
@@ -288,7 +314,7 @@ export default function Message({
           </div>
         ) : (
           <>
-            <p className="mt-1">{content}</p>
+            <p className="mt-1">{renderTextWithLinks(content)}</p>
             {fileUrl && fileName && (
               <FileAttachment fileName={fileName} fileUrl={fileUrl} />
             )}
