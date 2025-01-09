@@ -35,6 +35,15 @@ export default function MessageList({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
   const [isMouseOverPicker, setIsMouseOverPicker] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<MessageType | null>(null);
+  const [isThreadOpen, setIsThreadOpen] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<{
+    url: string;
+    name: string;
+    type: string;
+  } | null>(null);
 
   // Fetch messages when channel changes
   useEffect(() => {
@@ -361,6 +370,35 @@ export default function MessageList({
     }
     };
   }, []);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
+
+    // Listen for profile updates
+    channel.bind('profile-update', (data: {
+      userId: string;
+      name: string;
+      imageUrl: string | null;
+    }) => {
+      setMessages(current =>
+        current.map(message =>
+          message.userId === data.userId
+            ? { 
+                ...message, 
+                userName: data.name,
+                userImage: data.imageUrl || message.userImage
+              }
+            : message
+        )
+      );
+    });
+
+    return () => {
+      pusherClient.unsubscribe(`workspace-${workspaceId}`);
+    };
+  }, [workspaceId]);
 
   return (
     <div className="flex-1 flex h-full">

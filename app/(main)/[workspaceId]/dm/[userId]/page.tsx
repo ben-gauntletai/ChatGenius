@@ -72,6 +72,7 @@ export default async function DirectMessagePage({
           userId={otherUser.userId}
           userName={otherUser.userName}
           status={otherUser.status}
+          workspaceId={params.workspaceId}
         />
       </div>
       <MessageList 
