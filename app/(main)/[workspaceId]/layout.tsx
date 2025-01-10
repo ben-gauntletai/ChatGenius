@@ -1,80 +1,49 @@
-import { redirect } from 'next/navigation'
-import { auth } from '@clerk/nextjs'
-import { prisma } from '@/lib/prisma'
+'use client';
 
-export default async function WorkspaceLayout({
+import { useEffect, useState } from 'react';
+import { redirect } from 'next/navigation';
+import ProfileModal from '@/components/modals/profile-modal';
+import { getWorkspaceData } from './actions';
+
+export default function WorkspaceLayout({
   children,
   params
 }: {
-  children: React.ReactNode
-  params: { workspaceId: string }
+  children: React.ReactNode;
+  params: { workspaceId: string };
 }) {
-  const { userId } = auth()
-  
-  if (!userId) {
-    redirect('/sign-in')
-  }
+  const [member, setMember] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  console.log('\n=== Workspace Layout - User Session ===')
-  console.log('User ID:', userId)
-  console.log('Workspace ID:', params.workspaceId)
-
-  // Find existing member
-  const existingMember = await prisma.workspaceMember.findFirst({
-    where: {
-      userId: userId,
-      workspaceId: params.workspaceId
-    }
-  })
-
-  console.log('\n=== Current Member Status ===')
-  if (existingMember) {
-    console.log('Member Found:')
-    console.log('Status:', existingMember.status)
-  } else {
-    console.log('No existing member found')
-  }
-
-  // Update member info while preserving status and custom profile
-  try {
-    const updatedMember = await prisma.workspaceMember.upsert({
-      where: {
-        id: existingMember?.id || ''
-      },
-      update: {
-        ...(existingMember?.status === 'OFFLINE' ? {
-          status: existingMember.lastActiveStatus
-        } : {})
-      },
-      create: {
-        userId: userId,
-        workspaceId: params.workspaceId,
-        userName: 'User',
-        userImage: '',
-        status: 'ONLINE',
-        lastActiveStatus: 'ONLINE',
-        role: 'MEMBER'
+  useEffect(() => {
+    const loadData = async () => {
+      const data = await getWorkspaceData(params.workspaceId);
+      if (!data) {
+        redirect('/');
       }
-    })
+      setMember(data.member);
+      setLoading(false);
+    };
 
-    console.log('\n=== Updated Member Info ===')
-    console.log('Current Status:', updatedMember.status)
-  } catch (error) {
-    console.error('\n=== Error Updating Member ===', error)
-  }
+    loadData();
+  }, [params.workspaceId]);
 
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: params.workspaceId },
-    include: { members: true }
-  })
-
-  if (!workspace) {
-    redirect('/')
+  if (loading) {
+    return <div>Loading...</div>;
   }
 
   return (
     <>
+      {member?.isFirstLogin && (
+        <ProfileModal 
+          isOpen={true}
+          onClose={() => {}}
+          currentImage={member.userImage}
+          hasCustomImage={member.hasCustomImage}
+          isFirstLogin={true}
+        />
+      )}
       {children}
     </>
-  )
+  );
 } 

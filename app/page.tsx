@@ -59,7 +59,11 @@ export default async function Home() {
         userImage: '',
         workspaceId: defaultWorkspace.id,
         role: 'MEMBER',
-        status: 'ONLINE'
+        status: 'ONLINE',
+        lastActiveStatus: 'ONLINE',
+        isFirstLogin: true,
+        hasCustomName: false,
+        hasCustomImage: false
       }
     })
 

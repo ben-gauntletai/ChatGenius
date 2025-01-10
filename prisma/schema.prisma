@@ -44,6 +44,7 @@ model WorkspaceMember {
   lastActiveStatus String   @default("ONLINE")
   hasCustomName Boolean  @default(false)
   hasCustomImage Boolean @default(false)
+  isFirstLogin  Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

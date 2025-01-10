@@ -1,3 +1,5 @@
+'use client';
+
 import { X, Upload } from 'lucide-react';
 import { useState } from 'react';
 import DefaultAvatar from '@/components/ui/default-avatar';
@@ -5,37 +7,87 @@ import DefaultAvatar from '@/components/ui/default-avatar';
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  userId: string;
-  userName: string;
-  status: string;
-  statusText: string;
-  onStatusTextChange: (text: string) => void;
-  onNameChange: (name: string) => void;
-  workspaceId: string;
-  currentImage: string | null;
-  hasCustomImage: boolean;
+  currentImage?: string;
+  hasCustomImage?: boolean;
+  isFirstLogin?: boolean;
 }
 
 export default function ProfileModal({
   isOpen,
   onClose,
-  userId,
-  userName,
-  status,
-  statusText,
-  onStatusTextChange,
-  onNameChange,
-  workspaceId,
   currentImage,
-  hasCustomImage
+  hasCustomImage,
+  isFirstLogin
 }: ProfileModalProps) {
+  const [userName, setUserName] = useState('');
+  const [status, setStatus] = useState('ONLINE');
+  const [statusText, setStatusText] = useState('');
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
-  
+
+  const updateProfile = async (data: any) => {
+    const response = await fetch('/api/profile/update', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to update profile');
+    }
+
+    return response;
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsLoading(true);
+      
+      await updateProfile({
+        userName: userName.trim() || 'User',
+        status,
+        statusText,
+        imageUrl: uploadedImage,
+        isFirstLogin: false
+      });
+
+      onClose();
+      window.location.reload(); // Refresh to update the UI with new profile data
+    } catch (error) {
+      console.error('Error saving profile:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    try {
+      setIsLoading(true);
+      
+      if (isFirstLogin) {
+        await updateProfile({
+          userName: 'User',
+          isFirstLogin: false
+        });
+      }
+      
+      onClose();
+      if (isFirstLogin) {
+        window.location.reload(); // Refresh to update the UI with new profile data
+      }
+    } catch (error) {
+      console.error('Error during cancel:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   // Use uploaded image if available, otherwise use current image
-  const displayImage = uploadedImageUrl || (hasCustomImage ? currentImage : null);
+  const displayImage = uploadedImage || (hasCustomImage ? currentImage : null);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -75,49 +127,12 @@ export default function ProfileModal({
       
       if (data.url) {
         console.log('Setting image URL:', data.url);
-        setUploadedImageUrl(data.url);
+        setUploadedImage(data.url);
       } else {
         console.error('No URL received in upload response');
       }
     } catch (error) {
       console.error('Error uploading file:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    try {
-      setIsLoading(true);
-      console.log('Saving profile with image:', uploadedImageUrl);
-      
-      // Use 'User' as fallback if name is empty
-      const nameToSave = userName.trim() || 'User';
-      
-      const response = await fetch('/api/profile/update', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: nameToSave,
-          imageUrl: uploadedImageUrl,
-          statusText,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update profile');
-      }
-
-      const data = await response.json();
-      console.log('Profile update response:', data);
-
-      if (data.success) {
-        onClose();
-      }
-    } catch (error) {
-      console.error('Error saving profile changes:', error);
     } finally {
       setIsLoading(false);
     }
@@ -152,7 +167,7 @@ export default function ProfileModal({
                   />
                 ) : (
                   <DefaultAvatar
-                    userId={userId}
+                    userId={userName}
                     name={userName}
                     className="w-full h-full text-2xl"
                   />
@@ -183,7 +198,7 @@ export default function ProfileModal({
             <input
               type="text"
               value={userName}
-              onChange={(e) => onNameChange(e.target.value)}
+              onChange={(e) => setUserName(e.target.value)}
               placeholder="Enter your name"
               className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#3F0E40] focus:border-transparent text-gray-700"
               disabled={isLoading}
@@ -198,7 +213,7 @@ export default function ProfileModal({
             <input
               type="text"
               value={statusText}
-              onChange={(e) => onStatusTextChange(e.target.value)}
+              onChange={(e) => setStatusText(e.target.value)}
               placeholder="What's on your mind?"
               className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#3F0E40] focus:border-transparent text-gray-700"
               disabled={isLoading}
@@ -209,7 +224,7 @@ export default function ProfileModal({
         {/* Footer */}
         <div className="flex justify-end gap-2 p-6 border-t bg-gray-50 rounded-b-lg">
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 disabled:opacity-50"
             disabled={isLoading}
           >
