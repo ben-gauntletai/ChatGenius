@@ -42,7 +42,9 @@ export default async function WorkspaceLayout({
         id: existingMember?.id || ''
       },
       update: {
-        ...(existingMember ? {} : { status: 'ONLINE' })
+        ...(existingMember?.status === 'OFFLINE' ? {
+          status: existingMember.lastActiveStatus
+        } : {})
       },
       create: {
         userId: userId,
@@ -50,6 +52,7 @@ export default async function WorkspaceLayout({
         userName: 'User',
         userImage: '',
         status: 'ONLINE',
+        lastActiveStatus: 'ONLINE',
         role: 'MEMBER'
       }
     })

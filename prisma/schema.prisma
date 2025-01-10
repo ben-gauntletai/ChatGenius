@@ -41,6 +41,7 @@ model WorkspaceMember {
   userImage     String   @default("")
   role          String   @default("MEMBER")
   status        String   @default("OFFLINE")
+  lastActiveStatus String   @default("ONLINE")
   hasCustomName Boolean  @default(false)
   hasCustomImage Boolean @default(false)
   createdAt     DateTime @default(now())

@@ -5,12 +5,6 @@ import { prisma } from '@/lib/prisma';
 import { pusherServer } from '@/lib/pusher';
 
 export async function POST(req: Request) {
-  const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
-
-  if (!WEBHOOK_SECRET) {
-    throw new Error('Please add CLERK_WEBHOOK_SECRET from Clerk Dashboard to .env');
-  }
-
   // Get the headers
   const headerPayload = headers();
   const svix_id = headerPayload.get("svix-id");
@@ -28,11 +22,12 @@ export async function POST(req: Request) {
   const payload = await req.json();
   const body = JSON.stringify(payload);
 
-  // Create a new Svix instance with your secret
-  const wh = new Webhook(WEBHOOK_SECRET);
+  // Create a new Svix instance with your webhook secret
+  const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET || '');
 
   let evt: WebhookEvent;
 
+  // Verify the payload with the headers
   try {
     evt = wh.verify(body, {
       "svix-id": svix_id,
@@ -46,36 +41,51 @@ export async function POST(req: Request) {
     });
   }
 
-  // Handle the event
-  if (evt.type === 'session.ended') {
+  // Handle the webhook
+  const eventType = evt.type;
+
+  if (eventType === 'session.ended') {
     const { user_id } = evt.data;
 
-    // Update all workspace memberships for this user to OFFLINE
-    const workspaceMembers = await prisma.workspaceMember.findMany({
-      where: {
-        userId: user_id
-      }
-    });
-
-    // Update each membership and notify via Pusher
-    await Promise.all(workspaceMembers.map(async (member) => {
-      // Update status to OFFLINE
-      await prisma.workspaceMember.update({
+    try {
+      // Find all workspace memberships for the user
+      const members = await prisma.workspaceMember.findMany({
         where: {
-          id: member.id
-        },
-        data: {
-          status: 'OFFLINE'
+          userId: user_id
         }
       });
 
-      // Notify via Pusher
-      await pusherServer.trigger(
-        `workspace-${member.workspaceId}`,
-        'member-status-update',
-        { userId: user_id, status: 'OFFLINE' }
-      );
-    }));
+      // Update status to offline for all memberships
+      for (const member of members) {
+        // Only update lastActiveStatus if current status isn't already OFFLINE
+        await prisma.workspaceMember.update({
+          where: {
+            id: member.id
+          },
+          data: {
+            ...(member.status !== 'OFFLINE' && {
+              lastActiveStatus: member.status
+            }),
+            status: 'OFFLINE'
+          }
+        });
+
+        // Broadcast status change to all workspace members
+        await pusherServer.trigger(
+          `workspace:${member.workspaceId}`,
+          'member:update',
+          {
+            id: member.id,
+            status: 'OFFLINE'
+          }
+        );
+      }
+
+      return new Response('Status updated to offline', { status: 200 });
+    } catch (error) {
+      console.error('Error updating status:', error);
+      return new Response('Error updating status', { status: 500 });
+    }
   }
 
   return new Response('', { status: 200 });
