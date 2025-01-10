@@ -21,7 +21,7 @@ export default function ProfileModal({
   isFirstLogin
 }: ProfileModalProps) {
   const { updateMember, currentMember } = useWorkspaceMembers();
-  const [userName, setUserName] = useState('');
+  const [userName, setUserName] = useState(currentMember?.userName || '');
   const [status, setStatus] = useState(currentMember?.status || 'ONLINE');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
