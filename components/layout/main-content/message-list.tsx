@@ -7,6 +7,7 @@ import Message from './message'
 import Thread from './thread'
 import { PaperclipIcon, X } from 'lucide-react'
 import { Message as MessageType, Reaction } from '@/types'
+import { useWorkspaceMembers } from '@/contexts/workspace-members-context'
 
 interface Profile {
   name: string;
@@ -27,6 +28,7 @@ export default function MessageList({
   otherUserId?: string
 }) {
   const { userId } = useAuth()
+  const { members } = useWorkspaceMembers()
   const [messages, setMessages] = useState<MessageType[]>(initialMessages)
   const [activeThread, setActiveThread] = useState<MessageType | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -49,42 +51,22 @@ export default function MessageList({
     name: string;
     type: string;
   } | null>(null);
-  const [latestProfiles, setLatestProfiles] = useState<Record<string, Profile>>({});
 
-  // Fetch initial profile data
+  // Update messages with latest member info
   useEffect(() => {
-    const fetchProfiles = async () => {
-      if (!workspaceId) return;
-      try {
-        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
-        if (!response.ok) throw new Error('Failed to fetch members');
-        
-        const members = await response.json();
-        const profiles = members.reduce((acc: Record<string, Profile>, member: any) => {
-          acc[member.userId] = {
-            name: member.hasCustomName ? member.userName : 'User',
-            image: member.hasCustomImage && member.userImage?.startsWith('/api/files/') ? member.userImage : null
-          };
-          return acc;
-        }, {});
-        
-        setLatestProfiles(profiles);
-        
-        // Update existing messages with latest profile info
-        setMessages(current => 
-          current.map(message => ({
-            ...message,
-            userName: profiles[message.userId]?.name || 'User',
-            userImage: profiles[message.userId]?.image || null
-          }))
-        );
-      } catch (error) {
-        console.error('Failed to fetch profiles:', error);
-      }
-    };
+    if (!members.length) return;
 
-    fetchProfiles();
-  }, [workspaceId]);
+    setMessages(current =>
+      current.map(message => {
+        const member = members.find(m => m.userId === message.userId);
+        return {
+          ...message,
+          userName: member?.userName || message.userName,
+          userImage: member?.userImage || message.userImage
+        };
+      })
+    );
+  }, [members]);
 
   // Fetch messages when channel or DM user changes
   useEffect(() => {
@@ -114,14 +96,21 @@ export default function MessageList({
         if (!response.ok) throw new Error('Failed to fetch messages');
         
         const data = await response.json();
-        setMessages(data);
+        setMessages(data.map((message: MessageType) => {
+          const member = members.find(m => m.userId === message.userId);
+          return {
+            ...message,
+            userName: member?.userName || message.userName,
+            userImage: member?.userImage || message.userImage
+          };
+        }));
       } catch (error) {
         console.error('Error fetching messages:', error);
       }
     };
 
     fetchMessages();
-  }, [channelId, isDM, workspaceId, otherUserId]);
+  }, [channelId, isDM, workspaceId, otherUserId, members]);
 
   // Pusher subscription
   useEffect(() => {
@@ -142,12 +131,12 @@ export default function MessageList({
         const exists = current.some(m => m.id === message.id);
         if (exists) return current;
         
-        // Use latest profile info if available
-        const latestProfile = latestProfiles[message.userId];
-        const updatedMessage = latestProfile ? {
+        // Use latest member info
+        const member = members.find(m => m.userId === message.userId);
+        const updatedMessage = member ? {
           ...message,
-          userName: latestProfile.name,
-          userImage: latestProfile.image
+          userName: member.userName,
+          userImage: member.userImage
         } : message;
         
         return [...current, updatedMessage];
@@ -192,48 +181,7 @@ export default function MessageList({
       channel.unbind('message-delete', deleteMessageHandler);
       pusherClient.unsubscribe(channelName);
     };
-  }, [channelId, isDM, otherUserId, userId, latestProfiles]);
-
-  // Listen for profile updates
-  useEffect(() => {
-    if (!workspaceId) return;
-
-    const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
-    
-    channel.bind('profile-update', (data: {
-      userId: string;
-      name: string;
-      imageUrl: string | null;
-      hasCustomName: boolean;
-      hasCustomImage: boolean;
-    }) => {
-      console.log('Received profile update in message list:', data);
-      
-      // Update latestProfiles
-      setLatestProfiles(current => ({
-        ...current,
-        [data.userId]: {
-          name: data.hasCustomName ? data.name : 'User',
-          image: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null
-        }
-      }));
-    });
-
-    return () => {
-      pusherClient.unsubscribe(`workspace-${workspaceId}`);
-    };
-  }, [workspaceId]);
-
-  // Update messages when latestProfiles changes
-  useEffect(() => {
-    setMessages(current =>
-      current.map(message => ({
-        ...message,
-        userName: latestProfiles[message.userId]?.name || message.userName,
-        userImage: latestProfiles[message.userId]?.image || message.userImage
-      }))
-    );
-  }, [latestProfiles]);
+  }, [channelId, isDM, otherUserId, userId, members]);
 
   // Scroll to bottom when messages update
   useEffect(() => {

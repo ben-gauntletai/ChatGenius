@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
-import { useAuth } from '@clerk/nextjs';
+import { useWorkspaceMembers } from '@/contexts/workspace-members-context';
 
 const statuses = [
   { id: 'ONLINE', label: 'Active', color: 'bg-green-500' },
@@ -12,67 +12,25 @@ const statuses = [
 ];
 
 export default function StatusDropdown({ 
-  workspaceId,
-  currentStatus
+  workspaceId
 }: { 
   workspaceId: string;
-  currentStatus?: string;
 }) {
-  const { userId } = useAuth();
+  const { currentMember, updateMember } = useWorkspaceMembers();
   const [isOpen, setIsOpen] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Fetch initial status on mount
-  useEffect(() => {
-    const fetchStatus = async () => {
-      if (!workspaceId || !userId) return;
-      
-      try {
-        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
-        const members = await response.json();
-        const currentMember = members.find((m: any) => m.userId === userId);
-        
-        if (currentMember?.status) {
-          setStatus(currentMember.status);
-        }
-      } catch (error) {
-        console.error('Failed to fetch status:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchStatus();
-  }, [workspaceId, userId]);
-
-  // Update local state when prop changes
-  useEffect(() => {
-    if (currentStatus && !isLoading) {
-      setStatus(currentStatus);
-    }
-  }, [currentStatus, isLoading]);
 
   const handleStatusChange = async (newStatus: string) => {
+    if (!currentMember) return;
+    
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/members/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update status');
-      }
-
-      setStatus(newStatus);
+      await updateMember(currentMember.id, { status: newStatus });
       setIsOpen(false);
     } catch (error) {
       console.error('Failed to update status:', error);
     }
   };
 
-  if (isLoading || !status) {
+  if (!currentMember) {
     return (
       <div className="flex items-center gap-2 px-3 py-1">
         <div className="w-2 h-2 rounded-full bg-gray-500 animate-pulse" />
@@ -88,13 +46,13 @@ export default function StatusDropdown({
         className="flex items-center gap-2 px-3 py-1 rounded hover:bg-[#4A154B] text-white/70 hover:text-white"
       >
         <div className={`w-2 h-2 rounded-full ${
-          status === 'ONLINE' ? 'bg-green-500' :
-          status === 'AWAY' ? 'bg-yellow-500' :
-          status === 'BUSY' ? 'bg-red-500' :
+          currentMember.status === 'ONLINE' ? 'bg-green-500' :
+          currentMember.status === 'AWAY' ? 'bg-yellow-500' :
+          currentMember.status === 'BUSY' ? 'bg-red-500' :
           'bg-gray-500'
         }`} />
         <span className="text-sm">
-          {statuses.find(s => s.id === status)?.label ?? 'Loading...'}
+          {statuses.find(s => s.id === currentMember.status)?.label ?? 'Loading...'}
         </span>
         <ChevronDown className="w-4 h-4" />
       </button>
@@ -109,7 +67,7 @@ export default function StatusDropdown({
             >
               <div className={`w-2 h-2 rounded-full mr-2 ${s.color}`} />
               {s.label}
-              {status === s.id && (
+              {currentMember.status === s.id && (
                 <Check className="w-4 h-4 ml-auto" />
               )}
             </button>

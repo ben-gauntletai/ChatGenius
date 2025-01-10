@@ -1,90 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Image from 'next/image';
-import { useRouter, usePathname } from 'next/navigation';
-import { ChevronDown, Users, MessageSquare, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, Users, Loader2 } from 'lucide-react';
 import { useAuth } from '@clerk/nextjs';
-import { pusherClient } from '@/lib/pusher';
 import DefaultAvatar from '@/components/ui/default-avatar';
-
-interface Member {
-  id: string;
-  userId: string;
-  userName: string;
-  userImage: string | null;
-  role: string;
-  hasCustomName: boolean;
-  hasCustomImage: boolean;
-}
+import { useWorkspaceMembers } from '@/contexts/workspace-members-context';
 
 export default function MemberList({ workspaceId }: { workspaceId: string }) {
   const { userId } = useAuth();
-  const [members, setMembers] = useState<Member[]>([]);
+  const { members, isLoading } = useWorkspaceMembers();
   const [isExpanded, setIsExpanded] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-
-    const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
-
-    // Listen for profile updates
-    channel.bind('profile-update', (data: {
-      userId: string;
-      name: string;
-      imageUrl: string | null;
-      hasCustomName: boolean;
-      hasCustomImage: boolean;
-    }) => {
-      setMembers(current =>
-        current.map(member =>
-          member.userId === data.userId
-            ? {
-                ...member,
-                userName: data.hasCustomName ? data.name : 'User',
-                userImage: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null,
-                hasCustomName: data.hasCustomName,
-                hasCustomImage: data.hasCustomImage
-              }
-            : member
-        )
-      );
-    });
-
-    return () => {
-      pusherClient.unsubscribe(`workspace-${workspaceId}`);
-    };
-  }, [workspaceId]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchMembers = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch(`/api/workspaces/${workspaceId}/members`, {
-          cache: 'no-store'
-        });
-        const data = await response.json();
-        if (mounted) {
-          setMembers(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch members:', error);
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchMembers();
-
-    return () => {
-      mounted = false;
-    };
-  }, [workspaceId]);
 
   // Sort members to put current user first
   const sortedMembers = [...members].sort((a, b) => {
@@ -122,7 +47,7 @@ export default function MemberList({ workspaceId }: { workspaceId: string }) {
                 className="flex items-center px-2 py-[6px] rounded-md text-[15px] text-white/70 hover:bg-[#350D36] group"
               >
                 <div className="w-4 h-4 relative rounded-sm overflow-hidden mr-2">
-                  {member.hasCustomImage && member.userImage?.startsWith('/api/files/') ? (
+                  {member.hasCustomImage && member.userImage ? (
                     <img
                       src={member.userImage}
                       alt={member.userName}

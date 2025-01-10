@@ -12,6 +12,7 @@ import DirectMessageList from '@/components/workspace/direct-message-list'
 import StatusDropdown from '@/components/status-dropdown'
 import SearchDropdown from '@/components/search/search-dropdown'
 import UserProfile from '@/components/layout/sidebar/user-profile'
+import { WorkspaceMembersProvider } from '@/contexts/workspace-members-context'
 
 interface Channel {
   id: string
@@ -36,26 +37,6 @@ export default function MainLayout({
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
-  const [currentStatus, setCurrentStatus] = useState('ONLINE')
-
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const response = await fetch(`/api/workspaces/${params.workspaceId}/members`);
-        const members = await response.json();
-        const currentMember = members.find((m: any) => m.userId === userId);
-        if (currentMember?.status) {
-          setCurrentStatus(currentMember.status);
-        }
-      } catch (error) {
-        console.error('Error fetching status:', error);
-      }
-    };
-
-    if (params.workspaceId && userId) {
-      fetchStatus();
-    }
-  }, [params.workspaceId, userId]);
 
   const handleChannelAdded = async () => {
     setShowAddChannel(false)
@@ -147,129 +128,130 @@ export default function MainLayout({
   }, [searchQuery, params.workspaceId])
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <div className="w-72 bg-[#3F0E40] text-white flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-white/10">
-          <h1 className="text-white font-bold text-lg">Your Workspace</h1>
-          <div className="mt-2">
-            <StatusDropdown workspaceId={params.workspaceId as string} />
+    <WorkspaceMembersProvider workspaceId={params.workspaceId}>
+      <div className="flex h-screen overflow-hidden">
+        <div className="w-72 bg-[#3F0E40] text-white flex flex-col overflow-hidden">
+          <div className="p-4 border-b border-white/10">
+            <h1 className="text-white font-bold text-lg">Your Workspace</h1>
+            <div className="mt-2">
+              <StatusDropdown workspaceId={params.workspaceId} />
+            </div>
           </div>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <div className="space-y-4 py-4">
-            <div className="px-4 mb-6">
-              <button
-                onClick={() => setIsChannelListExpanded(!isChannelListExpanded)}
-                className="flex items-center mb-2 text-gray-300 hover:text-white w-full"
-              >
-                <ChevronDown className={`h-4 w-4 mr-1 transition-transform ${isChannelListExpanded ? '' : '-rotate-90'}`} />
-                <span>Channels</span>
-              </button>
-              
-              {isChannelListExpanded && (
-                <div className="space-y-1 max-h-[300px] overflow-y-auto custom-scrollbar">
-                  {channels?.map((channel) => (
-                    <Link
-                      key={channel.id}
-                      href={`/${params.workspaceId}/${channel.id}`}
-                      className={`group flex items-center px-2 py-1 rounded hover:bg-[#4A154B] text-gray-300 hover:text-white ${
-                        pathname === `/${params.workspaceId}/${channel.id}` ? 'bg-[#4A154B] text-white' : ''
-                      }`}
-                    >
-                      <div className="flex-1 flex items-center">
-                        <Hash className="h-4 w-4 mr-2" />
-                        <span>{channel.name}</span>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setChannelToDelete(channel);
-                        }}
-                        className="opacity-0 group-hover:opacity-100"
+          
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="space-y-4 py-4">
+              <div className="px-4 mb-6">
+                <button
+                  onClick={() => setIsChannelListExpanded(!isChannelListExpanded)}
+                  className="flex items-center mb-2 text-gray-300 hover:text-white w-full"
+                >
+                  <ChevronDown className={`h-4 w-4 mr-1 transition-transform ${isChannelListExpanded ? '' : '-rotate-90'}`} />
+                  <span>Channels</span>
+                </button>
+                
+                {isChannelListExpanded && (
+                  <div className="space-y-1 max-h-[300px] overflow-y-auto custom-scrollbar">
+                    {channels?.map((channel) => (
+                      <Link
+                        key={channel.id}
+                        href={`/${params.workspaceId}/${channel.id}`}
+                        className={`group flex items-center px-2 py-1 rounded hover:bg-[#4A154B] text-gray-300 hover:text-white ${
+                          pathname === `/${params.workspaceId}/${channel.id}` ? 'bg-[#4A154B] text-white' : ''
+                        }`}
                       >
-                        <Trash2 className="h-4 w-4 text-gray-300 group-hover:text-white" />
-                      </button>
-                    </Link>
-                  ))}
-                  
-                  <button
-                    onClick={() => setShowAddChannel(true)}
-                    className="flex items-center px-2 py-1 w-full text-gray-300 hover:text-white hover:bg-[#4A154B] rounded"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    <span>Add channels</span>
-                  </button>
+                        <div className="flex-1 flex items-center">
+                          <Hash className="h-4 w-4 mr-2" />
+                          <span>{channel.name}</span>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setChannelToDelete(channel);
+                          }}
+                          className="opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="h-4 w-4 text-gray-300 group-hover:text-white" />
+                        </button>
+                      </Link>
+                    ))}
+                    
+                    <button
+                      onClick={() => setShowAddChannel(true)}
+                      className="flex items-center px-2 py-1 w-full text-gray-300 hover:text-white hover:bg-[#4A154B] rounded"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      <span>Add channels</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {params.workspaceId && (
+                <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                  <DirectMessageList workspaceId={params.workspaceId} />
                 </div>
               )}
             </div>
+          </div>
 
-            {params.workspaceId && (
-              <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
-                <DirectMessageList workspaceId={params.workspaceId as string} />
-              </div>
-            )}
+          <div className="p-4">
+            <UserProfile 
+              workspaceId={params.workspaceId} 
+              onSignOut={() => signOut()} 
+            />
           </div>
         </div>
 
-        <div className="p-4">
-          <UserProfile 
-            workspaceId={params.workspaceId} 
-            status={currentStatus} 
-            onSignOut={() => signOut()} 
-          />
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="h-20 border-b flex items-center px-4 bg-white">
-          <div className="max-w-3xl w-full mx-auto relative">
-            <form onSubmit={handleSearch} className="w-full">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    setShowSearchDropdown(true)
-                  }}
-                  onFocus={() => setShowSearchDropdown(true)}
-                  placeholder="Search messages..."
-                  className="w-full bg-gray-100 text-gray-900 placeholder-gray-500 text-sm rounded px-3 py-3 pl-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="h-20 border-b flex items-center px-4 bg-white">
+            <div className="max-w-3xl w-full mx-auto relative">
+              <form onSubmit={handleSearch} className="w-full">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      setShowSearchDropdown(true)
+                    }}
+                    onFocus={() => setShowSearchDropdown(true)}
+                    placeholder="Search messages..."
+                    className="w-full bg-gray-100 text-gray-900 placeholder-gray-500 text-sm rounded px-3 py-3 pl-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <Search className="h-4 w-4 text-gray-400 absolute left-2 top-3.5" />
+                </div>
+              </form>
+              {showSearchDropdown && searchQuery.trim() && (
+                <SearchDropdown
+                  results={searchResults}
+                  isLoading={isSearching}
+                  onClose={() => setShowSearchDropdown(false)}
                 />
-                <Search className="h-4 w-4 text-gray-400 absolute left-2 top-3.5" />
-              </div>
-            </form>
-            {showSearchDropdown && searchQuery.trim() && (
-              <SearchDropdown
-                results={searchResults}
-                isLoading={isSearching}
-                onClose={() => setShowSearchDropdown(false)}
-              />
-            )}
+              )}
+            </div>
+          </div>
+          
+          <div className="flex-1 overflow-hidden">
+            {children}
           </div>
         </div>
-        
-        <div className="flex-1 overflow-hidden">
-          {children}
-        </div>
-      </div>
 
-      {showAddChannel && (
-        <AddChannelModal
-          isOpen={showAddChannel}
-          workspaceId={params.workspaceId as string}
-          onClose={() => setShowAddChannel(false)}
-          onChannelCreated={handleChannelAdded}
+        {showAddChannel && (
+          <AddChannelModal
+            isOpen={showAddChannel}
+            workspaceId={params.workspaceId}
+            onClose={() => setShowAddChannel(false)}
+            onChannelCreated={handleChannelAdded}
+          />
+        )}
+
+        <DeleteChannelModal
+          isOpen={!!channelToDelete}
+          channelName={channelToDelete?.name || ''}
+          onClose={() => setChannelToDelete(null)}
+          onConfirm={handleDeleteChannel}
         />
-      )}
-
-      <DeleteChannelModal
-        isOpen={!!channelToDelete}
-        channelName={channelToDelete?.name || ''}
-        onClose={() => setChannelToDelete(null)}
-        onConfirm={handleDeleteChannel}
-      />
-    </div>
+      </div>
+    </WorkspaceMembersProvider>
   )
 }

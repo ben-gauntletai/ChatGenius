@@ -3,6 +3,7 @@
 import { X, Upload } from 'lucide-react';
 import { useState } from 'react';
 import DefaultAvatar from '@/components/ui/default-avatar';
+import { useWorkspaceMembers } from '@/contexts/workspace-members-context';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -19,42 +20,23 @@ export default function ProfileModal({
   hasCustomImage,
   isFirstLogin
 }: ProfileModalProps) {
+  const { updateMember, currentMember } = useWorkspaceMembers();
   const [userName, setUserName] = useState('');
-  const [status, setStatus] = useState('ONLINE');
-  const [statusText, setStatusText] = useState('');
+  const [status, setStatus] = useState(currentMember?.status || 'ONLINE');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  const updateProfile = async (data: any) => {
-    const response = await fetch('/api/profile/update', {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to update profile');
-    }
-
-    return response;
-  };
 
   const handleSave = async () => {
     try {
       setIsLoading(true);
       
-      await updateProfile({
+      await updateMember(currentMember!.id, {
         userName: userName.trim() || 'User',
         status,
-        statusText,
-        imageUrl: uploadedImage,
-        isFirstLogin: false
+        userImage: uploadedImage || undefined
       });
 
       onClose();
-      window.location.reload(); // Refresh to update the UI with new profile data
     } catch (error) {
       console.error('Error saving profile:', error);
     } finally {
@@ -67,16 +49,12 @@ export default function ProfileModal({
       setIsLoading(true);
       
       if (isFirstLogin) {
-        await updateProfile({
-          userName: 'User',
-          isFirstLogin: false
+        await updateMember(currentMember!.id, {
+          userName: 'User'
         });
       }
       
       onClose();
-      if (isFirstLogin) {
-        window.location.reload(); // Refresh to update the UI with new profile data
-      }
     } catch (error) {
       console.error('Error during cancel:', error);
     } finally {
@@ -84,7 +62,7 @@ export default function ProfileModal({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !currentMember) return null;
 
   // Use uploaded image if available, otherwise use current image
   const displayImage = uploadedImage || (hasCustomImage ? currentImage : null);
@@ -145,7 +123,7 @@ export default function ProfileModal({
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-semibold">Your profile</h2>
           <button 
-            onClick={onClose}
+            onClick={handleCancel}
             className="text-gray-400 hover:text-gray-600 transition"
             disabled={isLoading}
           >
@@ -162,13 +140,13 @@ export default function ProfileModal({
                 {displayImage ? (
                   <img
                     src={displayImage}
-                    alt={userName}
+                    alt={userName || currentMember.userName}
                     className="w-full h-full object-cover"
                   />
                 ) : (
                   <DefaultAvatar
-                    userId={userName}
-                    name={userName}
+                    userId={currentMember.userId}
+                    name={userName || currentMember.userName}
                     className="w-full h-full text-2xl"
                   />
                 )}
@@ -199,7 +177,7 @@ export default function ProfileModal({
               type="text"
               value={userName}
               onChange={(e) => setUserName(e.target.value)}
-              placeholder="Enter your name"
+              placeholder={currentMember.userName}
               className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#3F0E40] focus:border-transparent text-gray-700"
               disabled={isLoading}
             />
@@ -210,14 +188,17 @@ export default function ProfileModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Status
             </label>
-            <input
-              type="text"
-              value={statusText}
-              onChange={(e) => setStatusText(e.target.value)}
-              placeholder="What's on your mind?"
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#3F0E40] focus:border-transparent text-gray-700"
               disabled={isLoading}
-            />
+            >
+              <option value="ONLINE">Active</option>
+              <option value="AWAY">Away</option>
+              <option value="BUSY">Busy</option>
+              <option value="OFFLINE">Offline</option>
+            </select>
           </div>
         </div>
 

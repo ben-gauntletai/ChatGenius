@@ -1,8 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs';
 import { prisma } from '@/lib/prisma';
-import MessageList from '@/components/layout/main-content/message-list';
-import DirectMessageHeader from '@/components/layout/main-content/direct-message-header';
+import DirectMessageContainer from '@/components/layout/main-content/direct-message-container';
 
 export default async function DirectMessagePage({
   params
@@ -92,22 +91,10 @@ export default async function DirectMessagePage({
   });
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 flex flex-col">
-        <DirectMessageHeader
-          userId={otherUser.userId}
-          userName={otherUser.userName || 'User'}
-          status={otherUser.status}
-          workspaceId={params.workspaceId}
-          userImage={otherUser.userImage?.startsWith('/api/files/') ? otherUser.userImage : null}
-        />
-      </div>
-      <MessageList 
-        initialMessages={formattedMessages}
-        isDM={true}
-        otherUserId={params.userId}
-        workspaceId={params.workspaceId}
-      />
-    </div>
+    <DirectMessageContainer
+      otherUser={otherUser}
+      initialMessages={formattedMessages}
+      workspaceId={params.workspaceId}
+    />
   );
 }

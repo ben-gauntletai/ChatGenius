@@ -1,89 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, MessageSquare } from 'lucide-react';
 import DefaultAvatar from '@/components/ui/default-avatar';
-import { pusherClient } from '@/lib/pusher';
 import { useAuth } from '@clerk/nextjs';
-
-interface Member {
-  id: string;
-  userId: string;
-  userName: string;
-  userImage: string | null;
-  status: string;
-  hasCustomImage: boolean;
-  hasCustomName: boolean;
-}
+import { useWorkspaceMembers } from '@/contexts/workspace-members-context';
 
 export default function DirectMessageList({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   const { userId: currentUserId } = useAuth();
-  const [members, setMembers] = useState<Member[]>([]);
+  const { members, isLoading } = useWorkspaceMembers();
   const [isExpanded, setIsExpanded] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchMembers = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
-        if (!response.ok) throw new Error('Failed to fetch members');
-        const data = await response.json();
-        setMembers(data);
-      } catch (error) {
-        console.error('Failed to fetch members:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchMembers();
-
-    // Subscribe to workspace updates
-    const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
-
-    // Listen for member status updates
-    channel.bind('member-status-update', (data: { userId: string; status: string }) => {
-      setMembers(current =>
-        current.map(member =>
-          member.userId === data.userId
-            ? { ...member, status: data.status }
-            : member
-        )
-      );
-    });
-
-    // Listen for profile updates
-    channel.bind('profile-update', (data: {
-      userId: string;
-      name: string;
-      imageUrl: string | null;
-      hasCustomName: boolean;
-      hasCustomImage: boolean;
-    }) => {
-      setMembers(current =>
-        current.map(member =>
-          member.userId === data.userId
-            ? {
-                ...member,
-                userName: data.hasCustomName ? data.name : 'User',
-                userImage: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null,
-                hasCustomName: data.hasCustomName,
-                hasCustomImage: data.hasCustomImage
-              }
-            : member
-        )
-      );
-    });
-
-    return () => {
-      pusherClient.unsubscribe(`workspace-${workspaceId}`);
-    };
-  }, [workspaceId]);
-
-  const getDisplayName = (member: Member) => {
+  const getDisplayName = (member: any) => {
     const name = member.hasCustomName ? member.userName : 'User';
     return member.userId === currentUserId ? `${name} (Me)` : name;
   };
@@ -114,7 +44,7 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
               >
                 <div className="relative">
                   <div className="w-8 h-8 relative rounded-sm overflow-hidden">
-                    {member.hasCustomImage && member.userImage?.startsWith('/api/files/') ? (
+                    {member.hasCustomImage && member.userImage ? (
                       <img
                         src={member.userImage}
                         alt={getDisplayName(member)}
