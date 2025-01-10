@@ -41,7 +41,7 @@ export async function GET(
         reactions: true
       },
       orderBy: {
-        createdAt: "desc"
+        createdAt: "asc"
       }
     });
 
