@@ -51,19 +51,40 @@ export default async function DirectMessagePage({
     }
   });
 
-  const formattedMessages = messages.map(message => ({
-    id: message.id,
-    content: message.content,
-    createdAt: message.createdAt,
-    userId: message.senderId,
-    userName: message.senderName,
-    userImage: message.senderImage,
-    reactions: message.reactions,
-    isEdited: message.updatedAt !== message.createdAt,
-    fileUrl: message.fileUrl,
-    fileName: message.fileName,
-    fileType: message.fileType
-  }));
+  // Get all unique user IDs from messages
+  const userIds = Array.from(new Set(messages.map(m => m.senderId)));
+
+  // Get latest workspace member data for all users
+  const workspaceMembers = await prisma.workspaceMember.findMany({
+    where: {
+      userId: {
+        in: userIds
+      },
+      workspaceId: params.workspaceId
+    }
+  });
+
+  // Create a map for quick lookup
+  const memberMap = new Map(
+    workspaceMembers.map(member => [member.userId, member])
+  );
+
+  const formattedMessages = messages.map(message => {
+    const member = memberMap.get(message.senderId);
+    return {
+      id: message.id,
+      content: message.content,
+      createdAt: message.createdAt,
+      userId: message.senderId,
+      userName: member?.userName || message.senderName,
+      userImage: member?.userImage || message.senderImage,
+      reactions: message.reactions,
+      isEdited: message.updatedAt !== message.createdAt,
+      fileUrl: message.fileUrl,
+      fileName: message.fileName,
+      fileType: message.fileType
+    };
+  });
 
   return (
     <div className="flex flex-col h-full">

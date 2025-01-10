@@ -17,15 +17,22 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
   const [isEditing, setIsEditing] = useState(false);
   const [statusText, setStatusText] = useState("What's on your mind?");
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [displayName, setDisplayName] = useState(user?.fullName || 'User');
+  const [displayName, setDisplayName] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Immediately fetch current member data
   useEffect(() => {
     const fetchMemberData = async () => {
       if (!workspaceId || !userId) return;
 
       try {
-        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
+        const response = await fetch(`/api/workspaces/${workspaceId}/members`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        });
         if (!response.ok) throw new Error('Failed to fetch members');
         
         const members = await response.json();
@@ -38,14 +45,22 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
           if (currentMember.statusText) {
             setStatusText(currentMember.statusText);
           }
+        } else {
+          // Fallback to user data if no member found
+          setDisplayName(user?.fullName || 'User');
+          setProfileImage(null);
         }
       } catch (error) {
         console.error('Failed to fetch member data:', error);
+        // Fallback to user data on error
+        setDisplayName(user?.fullName || 'User');
+        setProfileImage(null);
       }
     };
 
+    // Call immediately
     fetchMemberData();
-  }, [workspaceId, userId]);
+  }, [workspaceId, userId, user]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -98,11 +113,18 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
           <div className="relative">
             <div className="w-10 h-10 relative rounded-sm overflow-hidden">
               {profileImage ? (
-                <img
-                  src={profileImage}
-                  alt={displayName}
-                  className="w-full h-full object-cover"
-                />
+                <div className="w-full h-full relative">
+                  <img
+                    src={profileImage}
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                    loading="eager"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      setProfileImage(null);
+                    }}
+                  />
+                </div>
               ) : (
                 <DefaultAvatar
                   userId={userId || ''}

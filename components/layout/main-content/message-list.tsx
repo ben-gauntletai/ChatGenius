@@ -44,6 +44,7 @@ export default function MessageList({
     name: string;
     type: string;
   } | null>(null);
+  const [latestUserProfiles, setLatestUserProfiles] = useState<Record<string, { name: string, image: string | null }>>({});
 
   // Fetch messages when channel changes
   useEffect(() => {
@@ -83,12 +84,39 @@ export default function MessageList({
     const channel = pusherClient.subscribe(channelName);
 
     // Bind events
-    const newMessageHandler = (message: MessageType) => {
-      setMessages(current => {
-        if (current.some(m => m.id === message.id)) return current;
-        return [...current, message];
-      });
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const newMessageHandler = async (message: MessageType) => {
+      console.log('Received new message:', message);
+      
+      try {
+        // Fetch current member data for the message sender
+        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
+        if (!response.ok) throw new Error('Failed to fetch members');
+        
+        const members = await response.json();
+        const messageSender = members.find((m: any) => m.userId === message.userId);
+        
+        setMessages(current => {
+          // Check if message already exists
+          if (current.some(m => m.id === message.id)) return current;
+          
+          // Use the latest member data if available
+          if (messageSender) {
+            message = {
+              ...message,
+              userName: messageSender.userName,
+              userImage: messageSender.userImage || ''
+            };
+          }
+          
+          return [...current, message];
+        });
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } catch (error) {
+        console.error('Error fetching member data for new message:', error);
+        // Still add the message even if we couldn't fetch the latest profile
+        setMessages(current => [...current, message]);
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
     };
 
     const updateMessageHandler = (updatedMessage: MessageType) => {
@@ -123,29 +151,36 @@ export default function MessageList({
 
     const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
 
-    channel.bind('profile-update', (data: {
+    channel.bind('profile-update', async (data: {
       userId: string;
       name: string;
       imageUrl: string | null;
     }) => {
       console.log('Received profile update in message list:', data);
-      setMessages(prevMessages => 
-        prevMessages.map(message => 
-          message.userId === data.userId
-            ? {
-                ...message,
-                userName: data.name,
-                userImage: data.imageUrl || message.userImage
-              }
-            : message
-        )
-      );
+      
+      // Refresh messages to get latest profile information
+      if (channelId) {
+        try {
+          const response = await fetch(`/api/channels/${channelId}/messages`, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache'
+            }
+          });
+          if (!response.ok) throw new Error('Failed to fetch messages');
+          
+          const updatedMessages = await response.json();
+          setMessages(updatedMessages);
+        } catch (error) {
+          console.error('Error refreshing messages:', error);
+        }
+      }
     });
 
     return () => {
       pusherClient.unsubscribe(`workspace-${workspaceId}`);
     };
-  }, [workspaceId]);
+  }, [workspaceId, channelId]);
 
   // Scroll to bottom when messages update
   useEffect(() => {

@@ -44,20 +44,39 @@ export default async function ChannelPage({
     }
   });
 
-  const formattedMessages = messages.map(message => ({
-    id: message.id,
-    content: message.content,
-    createdAt: message.createdAt,
-    userId: message.userId,
-    userName: message.userName,
-    userImage: message.userImage,
-    channelId: message.channelId,
-    reactions: message.reactions,
-    fileUrl: message.fileUrl,
-    fileName: message.fileName,
-    fileType: message.fileType,
-    replyCount: message.thread?.replies.length ?? 0
-  }));
+  // Get all workspace members in a single query
+  const workspaceMembers = await prisma.workspaceMember.findMany({
+    where: {
+      userId: {
+        in: messages.map(m => m.userId)
+      },
+      workspaceId: params.workspaceId
+    }
+  });
+
+  // Create a map for quick lookup
+  const memberMap = new Map(
+    workspaceMembers.map(member => [member.userId, member])
+  );
+
+  // Update messages with latest profile info
+  const formattedMessages = messages.map(message => {
+    const member = memberMap.get(message.userId);
+    return {
+      id: message.id,
+      content: message.content,
+      createdAt: message.createdAt,
+      userId: message.userId,
+      userName: member?.userName || message.userName,
+      userImage: member?.userImage || message.userImage,
+      channelId: message.channelId,
+      reactions: message.reactions,
+      fileUrl: message.fileUrl,
+      fileName: message.fileName,
+      fileType: message.fileType,
+      replyCount: message.thread?.replies.length ?? 0
+    };
+  });
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

@@ -20,6 +20,10 @@ export async function POST(req: Request) {
       where: {
         userId,
         workspaceId
+      },
+      select: {
+        userName: true,
+        userImage: true
       }
     });
 
@@ -27,29 +31,36 @@ export async function POST(req: Request) {
       return new NextResponse('User not found in workspace', { status: 404 })
     }
 
+    console.log('Found workspace member for message:', workspaceMember); // Debug log
+
+    // Ensure we have the correct profile information
+    const messageData = {
+      content,
+      fileUrl,
+      fileName,
+      fileType,
+      userId,
+      userName: workspaceMember.userName,
+      userImage: workspaceMember.userImage,
+      channelId,
+      workspaceId,
+    };
+
+    console.log('Creating message with data:', messageData); // Debug log
+
     const message = await prisma.message.create({
-      data: {
-        content,
-        fileUrl,
-        fileName,
-        fileType,
-        userId,
-        userName: workspaceMember.userName,
-        userImage: workspaceMember.userImage || user.imageUrl,
-        channelId,
-        workspaceId,
-      },
+      data: messageData,
       include: {
         reactions: true
       }
-    })
+    });
 
-    console.log('Created message:', message) // Debug log
+    console.log('Created message:', message); // Debug log
 
-    // Trigger Pusher event
-    await pusherServer.trigger(`channel-${channelId}`, 'new-message', message)
+    // Trigger Pusher event with the message
+    await pusherServer.trigger(`channel-${channelId}`, 'new-message', message);
 
-    return NextResponse.json(message)
+    return NextResponse.json(message);
   } catch (error) {
     console.error('[MESSAGES_POST]', error)
     return new NextResponse('Internal Error', { status: 500 })

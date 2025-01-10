@@ -13,12 +13,22 @@ export async function POST(req: Request) {
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const receiver = await prisma.workspaceMember.findFirst({
-      where: { userId: receiverId, workspaceId }
-    })
+    // Get both sender and receiver workspace member data
+    const [sender, receiver] = await Promise.all([
+      prisma.workspaceMember.findFirst({
+        where: { userId, workspaceId }
+      }),
+      prisma.workspaceMember.findFirst({
+        where: { userId: receiverId, workspaceId }
+      })
+    ]);
 
     if (!receiver) {
       return new NextResponse('Receiver not found', { status: 404 })
+    }
+
+    if (!sender) {
+      return new NextResponse('Sender not found', { status: 404 })
     }
 
     const message = await prisma.directMessage.create({
@@ -29,8 +39,8 @@ export async function POST(req: Request) {
         fileType,
         workspaceId,
         senderId: userId,
-        senderName: `${user.firstName} ${user.lastName}`,
-        senderImage: user.imageUrl,
+        senderName: sender.userName,
+        senderImage: sender.userImage,
         receiverId,
         receiverName: receiver.userName,
         receiverImage: receiver.userImage,
@@ -57,7 +67,7 @@ export async function POST(req: Request) {
     const channelName = `dm-${[userId, receiverId].sort().join('-')}`
     await pusherServer.trigger(channelName, 'new-message', formattedMessage)
 
-    return new NextResponse('Message sent successfully', { status: 200 })
+    return NextResponse.json(formattedMessage)
   } catch (error) {
     console.error('[DIRECT_MESSAGES_POST]', error)
     return new NextResponse('Internal Error', { status: 500 })
