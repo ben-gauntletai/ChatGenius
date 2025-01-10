@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs';
 import { prisma } from '@/lib/prisma';
+import { pusherServer } from '@/lib/pusher';
+import { EVENTS } from '@/lib/pusher-events';
 
 export async function DELETE(
   req: Request,
@@ -13,16 +15,27 @@ export async function DELETE(
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    await prisma.channel.delete({
+    const channel = await prisma.channel.delete({
       where: {
         id: params.channelId,
         workspaceId: params.workspaceId
       }
     });
 
-    return new NextResponse(null, { status: 200 });
+    // Trigger Pusher event for channel deletion
+    await pusherServer.trigger(
+      `workspace-${params.workspaceId}`,
+      EVENTS.CHANNEL_DELETE,
+      {
+        id: channel.id,
+        name: channel.name,
+        workspaceId: channel.workspaceId
+      }
+    );
+
+    return NextResponse.json(channel);
   } catch (error) {
-    console.error('[CHANNEL_DELETE]', error);
+    console.error('[CHANNELS_DELETE]', error);
     return new NextResponse('Internal Error', { status: 500 });
   }
 } 
