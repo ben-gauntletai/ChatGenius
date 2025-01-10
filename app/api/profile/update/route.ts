@@ -20,15 +20,26 @@ export async function PATCH(req: Request) {
 
     // Update all memberships
     const updatePromises = members.map(async (member) => {
+      // Only update the fields that are provided
+      const updateData: any = {};
+      
+      if (status !== undefined) {
+        updateData.status = status;
+      }
+      
+      if (userName !== undefined) {
+        updateData.userName = userName || 'User';
+        updateData.hasCustomName = !!userName;
+      }
+      
+      if (userImage !== undefined) {
+        updateData.userImage = userImage || member.userImage;
+        updateData.hasCustomImage = !!userImage;
+      }
+
       const updatedMember = await prisma.workspaceMember.update({
         where: { id: member.id },
-        data: {
-          userName: userName || 'User',
-          status: status || member.status,
-          userImage: userImage || member.userImage,
-          hasCustomName: !!userName,
-          hasCustomImage: !!userImage
-        }
+        data: updateData
       });
 
       // Broadcast update to workspace members

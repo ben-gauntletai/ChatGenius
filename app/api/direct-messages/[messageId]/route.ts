@@ -55,7 +55,7 @@ export async function PATCH(
 
     const message = await prisma.directMessage.findUnique({
       where: { id: params.messageId },
-      select: { senderId: true, receiverId: true }
+      select: { senderId: true, receiverId: true, workspaceId: true }
     })
 
     if (!message) {
@@ -66,9 +66,25 @@ export async function PATCH(
       return new NextResponse('Forbidden', { status: 403 })
     }
 
+    // Get the latest member data
+    const member = await prisma.workspaceMember.findFirst({
+      where: {
+        userId: message.senderId,
+        workspaceId: message.workspaceId
+      }
+    });
+
+    if (!member) {
+      return new NextResponse('Member not found', { status: 404 });
+    }
+
     const updatedMessage = await prisma.directMessage.update({
       where: { id: params.messageId },
-      data: { content },
+      data: { 
+        content,
+        senderName: member.userName || 'User',
+        senderImage: member.userImage?.startsWith('/api/files/') ? member.userImage : null
+      },
       include: { reactions: true }
     })
 
@@ -78,8 +94,8 @@ export async function PATCH(
       content: updatedMessage.content,
       createdAt: updatedMessage.createdAt,
       userId: updatedMessage.senderId,
-      userName: updatedMessage.senderName,
-      userImage: updatedMessage.senderImage,
+      userName: member.hasCustomName ? member.userName : 'User',
+      userImage: member.hasCustomImage && member.userImage?.startsWith('/api/files/') ? member.userImage : null,
       reactions: updatedMessage.reactions,
       isEdited: updatedMessage.updatedAt !== updatedMessage.createdAt,
       fileUrl: updatedMessage.fileUrl,
