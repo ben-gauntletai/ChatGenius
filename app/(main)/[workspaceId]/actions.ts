@@ -8,7 +8,17 @@ export async function getWorkspaceData(workspaceId: string) {
   const { userId } = auth();
   
   if (!userId) {
-    redirect('/sign-in');
+    redirect('/sign-in?message=Please sign in to access workspaces');
+  }
+
+  // Check if workspace exists first
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    include: { members: true }
+  });
+
+  if (!workspace) {
+    redirect('/sign-in?message=Workspace not found');
   }
 
   // Find existing member
@@ -42,15 +52,6 @@ export async function getWorkspaceData(workspaceId: string) {
       hasCustomImage: false
     }
   });
-
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: workspaceId },
-    include: { members: true }
-  });
-
-  if (!workspace) {
-    return null;
-  }
 
   return {
     member: updatedMember,

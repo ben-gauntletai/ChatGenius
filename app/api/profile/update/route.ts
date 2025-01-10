@@ -21,7 +21,9 @@ export async function PATCH(req: Request) {
     // Update all memberships
     const updatePromises = members.map(async (member) => {
       // Only update the fields that are provided
-      const updateData: any = {};
+      const updateData: any = {
+        isFirstLogin: false // Always set isFirstLogin to false on profile update
+      };
       
       if (status !== undefined) {
         updateData.status = status;

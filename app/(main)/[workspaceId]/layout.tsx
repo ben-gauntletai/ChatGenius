@@ -15,16 +15,16 @@ export default function WorkspaceLayout({
   const [member, setMember] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadData = async () => {
-      const data = await getWorkspaceData(params.workspaceId);
-      if (!data) {
-        redirect('/');
-      }
-      setMember(data.member);
-      setLoading(false);
-    };
+  const loadData = async () => {
+    const data = await getWorkspaceData(params.workspaceId);
+    if (!data) {
+      redirect('/');
+    }
+    setMember(data.member);
+    setLoading(false);
+  };
 
+  useEffect(() => {
     loadData();
   }, [params.workspaceId]);
 
@@ -37,7 +37,7 @@ export default function WorkspaceLayout({
       {member?.isFirstLogin && (
         <ProfileModal 
           isOpen={true}
-          onClose={() => {}}
+          onClose={() => loadData()}
           currentImage={member.userImage}
           hasCustomImage={member.hasCustomImage}
           isFirstLogin={true}
