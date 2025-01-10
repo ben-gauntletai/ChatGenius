@@ -17,55 +17,8 @@ interface WorkspaceHeaderProps {
 
 export default function WorkspaceHeader({ name }: WorkspaceHeaderProps) {
   const [showMenu, setShowMenu] = useState(false);
-  const [currentStatus, setCurrentStatus] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const params = useParams() as { workspaceId: string };
-  const { userId } = useAuth();
   const workspaceId = params.workspaceId;
-
-  useEffect(() => {
-    const fetchStatus = async () => {
-      if (!workspaceId || !userId) return;
-
-      try {
-        setIsLoading(true);
-        console.log('Fetching status - WorkspaceHeader:', { workspaceId, userId });
-        
-        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch members');
-        }
-
-        const members = await response.json();
-        console.log('WorkspaceHeader - All members:', members);
-        
-        const currentMember = members.find((m: Member) => m.userId === userId);
-        console.log('WorkspaceHeader - Current member:', currentMember);
-        
-        if (currentMember?.status) {
-          console.log('WorkspaceHeader - Setting status to:', currentMember.status);
-          setCurrentStatus(currentMember.status);
-        }
-      } catch (error) {
-        console.error('Failed to fetch status:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchStatus();
-  }, [workspaceId, userId]);
-
-  if (isLoading || !currentStatus) {
-    return (
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center justify-between w-full p-2">
-          <span className="font-semibold">{name}</span>
-          <div className="animate-pulse w-4 h-4 bg-gray-600 rounded" />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="p-4 border-b border-gray-700">
@@ -78,11 +31,7 @@ export default function WorkspaceHeader({ name }: WorkspaceHeaderProps) {
       </button>
       
       <div className="mt-2 px-2">
-        <StatusDropdown 
-          key={currentStatus}
-          workspaceId={workspaceId} 
-          currentStatus={currentStatus}
-        />
+        <StatusDropdown workspaceId={workspaceId} />
       </div>
     </div>
   );
