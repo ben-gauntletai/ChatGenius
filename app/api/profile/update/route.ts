@@ -14,14 +14,23 @@ export async function PATCH(req: Request) {
     console.log('Received profile update:', { name, imageUrl, statusText });
 
     // Create update data object based on what's provided
-    const updateData: any = {
-      userName: name,
-    };
+    const updateData: any = {};
 
-    // Only include imageUrl if it's provided and not null/undefined
-    if (imageUrl) {
+    // Only update name if provided and not empty
+    if (name && name.trim() !== '') {
+      updateData.userName = name;
+      updateData.hasCustomName = true;
+    }
+
+    // Only include imageUrl if it's provided and starts with /api/files/
+    if (imageUrl?.startsWith('/api/files/')) {
       console.log('Including image URL in update:', imageUrl);
       updateData.userImage = imageUrl;
+      updateData.hasCustomImage = true;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return new NextResponse('No valid updates provided', { status: 400 });
     }
 
     console.log('Final update data:', updateData);
@@ -34,44 +43,48 @@ export async function PATCH(req: Request) {
     console.log('Updated workspace member:', updatedMember);
 
     // Update all messages sent by this user
-    const updatedMessages = await prisma.message.updateMany({
-      where: { userId },
-      data: {
-        userName: name,
-        ...(imageUrl && { userImage: imageUrl })
-      }
-    });
-    console.log('Updated messages:', updatedMessages);
+    if (updateData.userName || updateData.userImage) {
+      const messageUpdateData: any = {};
+      if (updateData.userName) messageUpdateData.userName = updateData.userName;
+      if (updateData.userImage) messageUpdateData.userImage = updateData.userImage;
 
-    // Update direct messages data
-    const dmUpdateData = {
-      senderName: name,
-      receiverName: name,
-      ...(imageUrl && {
-        senderImage: imageUrl,
-        receiverImage: imageUrl
-      })
-    };
+      const updatedMessages = await prisma.message.updateMany({
+        where: { userId },
+        data: messageUpdateData
+      });
+      console.log('Updated messages:', updatedMessages);
 
-    // Update all direct messages sent by this user
-    const updatedSentDMs = await prisma.directMessage.updateMany({
-      where: { senderId: userId },
-      data: {
-        senderName: name,
-        ...(imageUrl && { senderImage: imageUrl })
+      // Update direct messages data
+      const dmUpdateData: any = {};
+      if (updateData.userName) {
+        dmUpdateData.senderName = updateData.userName;
+        dmUpdateData.receiverName = updateData.userName;
       }
-    });
-    console.log('Updated sent DMs:', updatedSentDMs);
+      if (updateData.userImage) {
+        dmUpdateData.senderImage = updateData.userImage;
+        dmUpdateData.receiverImage = updateData.userImage;
+      }
 
-    // Update all direct messages received by this user
-    const updatedReceivedDMs = await prisma.directMessage.updateMany({
-      where: { receiverId: userId },
-      data: {
-        receiverName: name,
-        ...(imageUrl && { receiverImage: imageUrl })
-      }
-    });
-    console.log('Updated received DMs:', updatedReceivedDMs);
+      // Update all direct messages sent by this user
+      const updatedSentDMs = await prisma.directMessage.updateMany({
+        where: { senderId: userId },
+        data: {
+          ...(updateData.userName && { senderName: updateData.userName }),
+          ...(updateData.userImage && { senderImage: updateData.userImage })
+        }
+      });
+      console.log('Updated sent DMs:', updatedSentDMs);
+
+      // Update all direct messages received by this user
+      const updatedReceivedDMs = await prisma.directMessage.updateMany({
+        where: { receiverId: userId },
+        data: {
+          ...(updateData.userName && { receiverName: updateData.userName }),
+          ...(updateData.userImage && { receiverImage: updateData.userImage })
+        }
+      });
+      console.log('Updated received DMs:', updatedReceivedDMs);
+    }
 
     // Get all workspaces the user is a member of
     const workspaces = await prisma.workspaceMember.findMany({
@@ -87,9 +100,11 @@ export async function PATCH(req: Request) {
           'profile-update',
           {
             userId,
-            name,
-            imageUrl,
-            statusText
+            name: updateData.userName,
+            imageUrl: updateData.userImage,
+            statusText,
+            hasCustomName: updateData.hasCustomName,
+            hasCustomImage: updateData.hasCustomImage
           }
         )
       )
@@ -98,10 +113,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({
       success: true,
       updates: {
-        member: updatedMember,
-        messages: updatedMessages,
-        sentDMs: updatedSentDMs,
-        receivedDMs: updatedReceivedDMs
+        member: updatedMember
       }
     });
   } catch (error) {

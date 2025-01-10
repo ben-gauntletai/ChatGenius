@@ -1,18 +1,16 @@
 import { redirect } from 'next/navigation'
-import { auth, currentUser } from '@clerk/nextjs'
+import { auth } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
 
 export default async function Home() {
   const { userId } = auth()
-  const user = await currentUser()
 
-  if (!userId || !user) {
+  if (!userId) {
     redirect('/sign-in')
   }
 
   console.log('\n=== User Login Session Start ===')
   console.log('User ID:', userId)
-  console.log('User Name:', `${user.firstName} ${user.lastName}`)
 
   // Find the default workspace
   const defaultWorkspace = await prisma.workspace.findFirst({
@@ -52,17 +50,15 @@ export default async function Home() {
         id: existingMember?.id || ''
       },
       update: {
-        userName: `${user.firstName} ${user.lastName}`,
-        userImage: user.imageUrl,
-        // Keep existing status if member exists
+        // Only update status if member exists
         ...(existingMember && {
           status: existingMember.status
         })
       },
       create: {
         userId: userId,
-        userName: `${user.firstName} ${user.lastName}`,
-        userImage: user.imageUrl,
+        userName: 'User',
+        userImage: '',
         workspaceId: defaultWorkspace.id,
         role: 'MEMBER',
         status: 'ONLINE'

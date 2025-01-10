@@ -10,7 +10,7 @@ export interface Message {
   createdAt: Date | string;
   userId: string;
   userName: string;
-  userImage: string;
+  userImage: string | null;
   channelId?: string;
   reactions: Reaction[];
   fileUrl?: string | null | undefined;

@@ -12,6 +12,7 @@ export async function GET(
     const messages = await prisma.message.findMany({
       where: {
         channelId,
+        threadId: null,
       },
       orderBy: {
         createdAt: 'asc',

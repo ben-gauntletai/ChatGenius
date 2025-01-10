@@ -61,6 +61,11 @@ export default async function DirectMessagePage({
         in: userIds
       },
       workspaceId: params.workspaceId
+    },
+    select: {
+      userId: true,
+      userName: true,
+      userImage: true
     }
   });
 
@@ -76,8 +81,8 @@ export default async function DirectMessagePage({
       content: message.content,
       createdAt: message.createdAt,
       userId: message.senderId,
-      userName: member?.userName || message.senderName,
-      userImage: member?.userImage || message.senderImage,
+      userName: member?.userName || 'User',
+      userImage: member?.userImage?.startsWith('/api/files/') ? member.userImage : null,
       reactions: message.reactions,
       isEdited: message.updatedAt !== message.createdAt,
       fileUrl: message.fileUrl,
@@ -91,9 +96,10 @@ export default async function DirectMessagePage({
       <div className="flex-1 flex flex-col">
         <DirectMessageHeader
           userId={otherUser.userId}
-          userName={otherUser.userName}
+          userName={otherUser.userName || 'User'}
           status={otherUser.status}
           workspaceId={params.workspaceId}
+          userImage={otherUser.userImage?.startsWith('/api/files/') ? otherUser.userImage : null}
         />
       </div>
       <MessageList 

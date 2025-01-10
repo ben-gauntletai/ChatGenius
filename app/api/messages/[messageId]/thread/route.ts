@@ -49,43 +49,63 @@ export async function POST(
     }
 
     // Handle regular message thread
-    const parentMessage = await prisma.message.findUnique({
+    const message = await prisma.message.findUnique({
       where: { id: params.messageId },
       include: { thread: true }
     })
 
-    if (!parentMessage) {
+    if (!message) {
       return new NextResponse('Message not found', { status: 404 })
     }
 
-    const thread = parentMessage.thread || await prisma.thread.create({
+    const thread = message.thread || await prisma.thread.create({
       data: {
         messageId: params.messageId
       }
     })
 
-    const reply = await prisma.message.create({
+    // Get the workspace member data
+    const member = await prisma.workspaceMember.findFirst({
+      where: {
+        userId,
+        workspaceId: message.workspaceId
+      }
+    })
+
+    if (!member) {
+      return new NextResponse('Member not found', { status: 404 })
+    }
+
+    // Create thread message with workspace member data
+    const threadMessage = await prisma.message.create({
       data: {
         content,
-        channelId: parentMessage.channelId,
-        workspaceId,
         userId,
-        userName: `${user.firstName} ${user.lastName}`,
-        userImage: user.imageUrl,
+        userName: member.userName || 'User',
+        userImage: member.userImage?.startsWith('/api/files/') ? member.userImage : '',
+        workspaceId: message.workspaceId,
+        channelId: message.channelId,
         threadId: thread.id
       },
       include: {
         reactions: true
       }
-    })
+    });
 
+    // Format the response
+    const formattedMessage = {
+      ...threadMessage,
+      isThreadReply: true
+    };
+
+    // Broadcast the new thread message
     await pusherServer.trigger(
       `thread-${thread.id}`,
       'new-thread-message',
-      reply
-    )
+      formattedMessage
+    );
 
-    return NextResponse.json(reply)
+    return NextResponse.json(formattedMessage);
   } catch (error) {
     console.error('[THREAD_POST]', error)
     return new NextResponse('Internal Error', { status: 500 })

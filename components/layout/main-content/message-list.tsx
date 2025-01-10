@@ -8,6 +8,11 @@ import Thread from './thread'
 import { PaperclipIcon, X } from 'lucide-react'
 import { Message as MessageType, Reaction } from '@/types'
 
+interface Profile {
+  name: string;
+  image: string | null;
+}
+
 export default function MessageList({ 
   initialMessages = [],
   channelId,
@@ -44,20 +49,68 @@ export default function MessageList({
     name: string;
     type: string;
   } | null>(null);
-  const [latestUserProfiles, setLatestUserProfiles] = useState<Record<string, { name: string, image: string | null }>>({});
+  const [latestProfiles, setLatestProfiles] = useState<Record<string, Profile>>({});
 
-  // Fetch messages when channel changes
+  // Fetch initial profile data
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      if (!workspaceId) return;
+      try {
+        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
+        if (!response.ok) throw new Error('Failed to fetch members');
+        
+        const members = await response.json();
+        const profiles = members.reduce((acc: Record<string, Profile>, member: any) => {
+          acc[member.userId] = {
+            name: member.hasCustomName ? member.userName : 'User',
+            image: member.hasCustomImage && member.userImage?.startsWith('/api/files/') ? member.userImage : null
+          };
+          return acc;
+        }, {});
+        
+        setLatestProfiles(profiles);
+        
+        // Update existing messages with latest profile info
+        setMessages(current => 
+          current.map(message => ({
+            ...message,
+            userName: profiles[message.userId]?.name || 'User',
+            userImage: profiles[message.userId]?.image || null
+          }))
+        );
+      } catch (error) {
+        console.error('Failed to fetch profiles:', error);
+      }
+    };
+
+    fetchProfiles();
+  }, [workspaceId]);
+
+  // Fetch messages when channel or DM user changes
   useEffect(() => {
     const fetchMessages = async () => {
-      if (!channelId) return;
+      if (!channelId && !isDM) return;
       
       try {
-        const response = await fetch(`/api/channels/${channelId}/messages`, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache'
-          }
-        });
+        let response;
+        if (isDM && workspaceId && otherUserId) {
+          response = await fetch(`/api/direct-messages?workspaceId=${workspaceId}&otherUserId=${otherUserId}`, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache'
+            }
+          });
+        } else if (channelId) {
+          response = await fetch(`/api/channels/${channelId}/messages`, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache'
+            }
+          });
+        } else {
+          return;
+        }
+
         if (!response.ok) throw new Error('Failed to fetch messages');
         
         const data = await response.json();
@@ -68,7 +121,7 @@ export default function MessageList({
     };
 
     fetchMessages();
-  }, [channelId]);
+  }, [channelId, isDM, workspaceId, otherUserId]);
 
   // Pusher subscription
   useEffect(() => {
@@ -78,51 +131,47 @@ export default function MessageList({
       ? `dm-${[otherUserId, userId].sort().join('-')}` 
       : `channel-${channelId}`
     
-    // Unsubscribe from previous channel if exists
     pusherClient.unsubscribe(channelName);
-    
     const channel = pusherClient.subscribe(channelName);
 
     // Bind events
     const newMessageHandler = async (message: MessageType) => {
       console.log('Received new message:', message);
+      setMessages(current => {
+        // Check if message already exists to prevent duplicates
+        const exists = current.some(m => m.id === message.id);
+        if (exists) return current;
+        
+        // Use latest profile info if available
+        const latestProfile = latestProfiles[message.userId];
+        const updatedMessage = latestProfile ? {
+          ...message,
+          userName: latestProfile.name,
+          userImage: latestProfile.image
+        } : message;
+        
+        return [...current, updatedMessage];
+      });
       
-      try {
-        // Fetch current member data for the message sender
-        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
-        if (!response.ok) throw new Error('Failed to fetch members');
-        
-        const members = await response.json();
-        const messageSender = members.find((m: any) => m.userId === message.userId);
-        
-        setMessages(current => {
-          // Check if message already exists
-          if (current.some(m => m.id === message.id)) return current;
-          
-          // Use the latest member data if available
-          if (messageSender) {
-            message = {
-              ...message,
-              userName: messageSender.userName,
-              userImage: messageSender.userImage || ''
-            };
-          }
-          
-          return [...current, message];
-        });
+      // Always scroll to bottom when new message arrives
+      setTimeout(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      } catch (error) {
-        console.error('Error fetching member data for new message:', error);
-        // Still add the message even if we couldn't fetch the latest profile
-        setMessages(current => [...current, message]);
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }
+      }, 100);
     };
 
     const updateMessageHandler = (updatedMessage: MessageType) => {
+      console.log('Received message update:', updatedMessage);
       setMessages(current =>
         current.map(message =>
-          message.id === updatedMessage.id ? updatedMessage : message
+          message.id === updatedMessage.id
+            ? {
+                ...message,
+                ...updatedMessage,
+                userName: updatedMessage.userName || message.userName,
+                userImage: updatedMessage.userImage || message.userImage,
+                reactions: updatedMessage.reactions
+              }
+            : message
         )
       );
     };
@@ -143,44 +192,50 @@ export default function MessageList({
       channel.unbind('message-delete', deleteMessageHandler);
       pusherClient.unsubscribe(channelName);
     };
-  }, [channelId, isDM, otherUserId, userId]);
+  }, [channelId, isDM, otherUserId, userId, latestProfiles]);
 
-  // Subscribe to profile updates
+  // Listen for profile updates
   useEffect(() => {
     if (!workspaceId) return;
 
     const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
-
-    channel.bind('profile-update', async (data: {
+    
+    channel.bind('profile-update', (data: {
       userId: string;
       name: string;
       imageUrl: string | null;
+      hasCustomName: boolean;
+      hasCustomImage: boolean;
     }) => {
       console.log('Received profile update in message list:', data);
       
-      // Refresh messages to get latest profile information
-      if (channelId) {
-        try {
-          const response = await fetch(`/api/channels/${channelId}/messages`, {
-            cache: 'no-store',
-            headers: {
-              'Cache-Control': 'no-cache'
-            }
-          });
-          if (!response.ok) throw new Error('Failed to fetch messages');
-          
-          const updatedMessages = await response.json();
-          setMessages(updatedMessages);
-        } catch (error) {
-          console.error('Error refreshing messages:', error);
+      // Update latestProfiles
+      setLatestProfiles(current => ({
+        ...current,
+        [data.userId]: {
+          name: data.hasCustomName ? data.name : 'User',
+          image: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null
         }
-      }
+      }));
+      
+      // Update messages for this user
+      setMessages(current =>
+        current.map(message =>
+          message.userId === data.userId
+            ? {
+                ...message,
+                userName: data.hasCustomName ? data.name : 'User',
+                userImage: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null
+              }
+            : message
+        )
+      );
     });
 
     return () => {
       pusherClient.unsubscribe(`workspace-${workspaceId}`);
     };
-  }, [workspaceId, channelId]);
+  }, [workspaceId]);
 
   // Scroll to bottom when messages update
   useEffect(() => {

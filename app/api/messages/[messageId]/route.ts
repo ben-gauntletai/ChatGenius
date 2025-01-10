@@ -28,14 +28,16 @@ export async function PATCH(
       }
     })
 
-    // Trigger update for both channel and thread
+    // Only broadcast to the appropriate channel
     if (message.threadId) {
+      // If it's a thread message, only broadcast to the thread
       await pusherServer.trigger(
         `thread-${message.threadId}`,
         'message-update',
         message
       )
     } else {
+      // If it's a regular message, broadcast to the channel
       await pusherServer.trigger(
         `channel-${message.channelId}`,
         'message-update',

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth, useUser } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs';
 import { LogOut } from 'lucide-react';
 import DefaultAvatar from '@/components/ui/default-avatar';
 import ProfileModal from '@/components/modals/profile-modal';
@@ -13,12 +13,13 @@ interface UserProfileProps {
 
 export default function UserProfile({ workspaceId, status, onSignOut }: UserProfileProps) {
   const { userId } = useAuth();
-  const { user } = useUser();
   const [isEditing, setIsEditing] = useState(false);
   const [statusText, setStatusText] = useState("What's on your mind?");
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [displayName, setDisplayName] = useState('');
+  const [displayName, setDisplayName] = useState('User');
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [hasCustomName, setHasCustomName] = useState(false);
+  const [hasCustomImage, setHasCustomImage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Immediately fetch current member data
@@ -40,27 +41,36 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
         
         if (currentMember) {
           console.log('Found current member:', currentMember);
-          setDisplayName(currentMember.userName);
-          setProfileImage(currentMember.userImage);
+          setHasCustomName(currentMember.hasCustomName || false);
+          setHasCustomImage(currentMember.hasCustomImage || false);
+          
+          // Only use custom values if the respective flags are true
+          setDisplayName(currentMember.hasCustomName ? currentMember.userName : 'User');
+          setProfileImage(currentMember.hasCustomImage && currentMember.userImage?.startsWith('/api/files/') ? currentMember.userImage : null);
+          
           if (currentMember.statusText) {
             setStatusText(currentMember.statusText);
           }
         } else {
-          // Fallback to user data if no member found
-          setDisplayName(user?.fullName || 'User');
+          // Use default values if no member found
+          setDisplayName('User');
           setProfileImage(null);
+          setHasCustomName(false);
+          setHasCustomImage(false);
         }
       } catch (error) {
         console.error('Failed to fetch member data:', error);
-        // Fallback to user data on error
-        setDisplayName(user?.fullName || 'User');
+        // Use default values on error
+        setDisplayName('User');
         setProfileImage(null);
+        setHasCustomName(false);
+        setHasCustomImage(false);
       }
     };
 
     // Call immediately
     fetchMemberData();
-  }, [workspaceId, userId, user]);
+  }, [workspaceId, userId]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -72,12 +82,18 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
       name: string;
       imageUrl: string | null;
       statusText: string;
+      hasCustomName: boolean;
+      hasCustomImage: boolean;
     }) => {
       if (data.userId === userId) {
         console.log('Received profile update:', data);
-        setDisplayName(data.name);
-        setProfileImage(data.imageUrl);
-        setStatusText(data.statusText);
+        setHasCustomName(data.hasCustomName || false);
+        setHasCustomImage(data.hasCustomImage || false);
+        
+        // Only use custom values if the respective flags are true
+        setDisplayName(data.hasCustomName ? data.name : 'User');
+        setProfileImage(data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null);
+        setStatusText(data.statusText || "What's on your mind?");
       }
     });
 
@@ -100,7 +116,7 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
   };
 
   const handleNameChange = async (newName: string) => {
-    setDisplayName(newName);
+    setDisplayName(newName || 'User');
   };
 
   return (
@@ -112,7 +128,7 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
         >
           <div className="relative">
             <div className="w-10 h-10 relative rounded-sm overflow-hidden">
-              {profileImage ? (
+              {hasCustomImage && profileImage ? (
                 <div className="w-full h-full relative">
                   <img
                     src={profileImage}
@@ -122,6 +138,7 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                       setProfileImage(null);
+                      setHasCustomImage(false);
                     }}
                   />
                 </div>

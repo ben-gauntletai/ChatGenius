@@ -18,12 +18,31 @@ const colorPalette = [
 ];
 
 export function getUserColor(userId: string): string {
+  // Return a default color if userId is undefined
+  if (!userId) return '#6366f1';
+
   // Use a simple hash function to get a consistent number from the userId
   const hash = userId.split('').reduce((acc, char) => {
     return char.charCodeAt(0) + ((acc << 5) - acc);
   }, 0);
 
-  // Use the absolute value of the hash to get a positive number
-  const index = Math.abs(hash) % colorPalette.length;
-  return colorPalette[index];
+  // Use the hash to select a color from our palette
+  const colors = [
+    '#6366f1', // Indigo
+    '#8b5cf6', // Purple
+    '#ec4899', // Pink
+    '#f43f5e', // Rose
+    '#ef4444', // Red
+    '#f97316', // Orange
+    '#f59e0b', // Amber
+    '#84cc16', // Lime
+    '#22c55e', // Green
+    '#10b981', // Emerald
+    '#14b8a6', // Teal
+    '#06b6d4', // Cyan
+    '#0ea5e9', // Light Blue
+    '#3b82f6'  // Blue
+  ];
+
+  return colors[Math.abs(hash) % colors.length];
 } 

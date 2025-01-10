@@ -16,76 +16,94 @@ export async function POST(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
+    // Get the message first
     const message = await prisma.message.findUnique({
-      where: { 
-        id: params.messageId 
-      },
-      include: { 
-        reactions: true 
-      }
+      where: { id: params.messageId },
+      include: { reactions: true }
     })
 
     if (!message) {
       return new NextResponse('Message not found', { status: 404 })
     }
 
+    // Get the workspace member data
+    const member = await prisma.workspaceMember.findFirst({
+      where: {
+        userId,
+        workspaceId: message.workspaceId
+      },
+      select: {
+        userName: true,
+        userImage: true
+      }
+    });
+
+    if (!member) {
+      return new NextResponse('Member not found', { status: 404 })
+    }
+
     // Check if reaction already exists
     const existingReaction = await prisma.reaction.findFirst({
       where: {
-        messageId: params.messageId,
         userId,
+        messageId: params.messageId,
         emoji
       }
-    })
+    });
 
     if (existingReaction) {
-      // Remove reaction if it exists
+      // If reaction exists, delete it
       await prisma.reaction.delete({
         where: {
           id: existingReaction.id
         }
-      })
+      });
     } else {
-      // Add new reaction
-      await prisma.reaction.create({
-        data: {
-          emoji,
-          userId,
-          userName: `${user.firstName} ${user.lastName}`,
-          userImage: user.imageUrl,
-          messageId: params.messageId
-        }
-      })
-    }
+      // Create reaction with workspace member data
+      const reactionData: any = {
+        emoji,
+        userId,
+        userName: member.userName || 'User',
+        messageId: params.messageId
+      };
 
-    // Get updated message with reactions
-    const updatedMessage = await prisma.message.findUnique({
-      where: { 
-        id: params.messageId 
-      },
-      include: { 
-        reactions: true 
+      if (member.userImage?.startsWith('/api/files/')) {
+        reactionData.userImage = member.userImage;
       }
-    })
 
-    // Trigger update for both channel and thread
-    if (message.threadId) {
-      await pusherServer.trigger(
-        `thread-${message.threadId}`,
-        'message-update',
-        updatedMessage
-      )
-    } else {
-      await pusherServer.trigger(
-        `channel-${message.channelId}`,
-        'message-update',
-        updatedMessage
-      )
+      const reaction = await prisma.reaction.create({
+        data: reactionData
+      });
     }
 
-    return NextResponse.json(updatedMessage)
+    // Get the updated message with reactions
+    const updatedMessage = await prisma.message.findUnique({
+      where: { id: params.messageId },
+      include: { 
+        reactions: true
+      }
+    });
+
+    if (!updatedMessage) {
+      return new NextResponse('Message not found', { status: 404 })
+    }
+
+    // Create the response with preserved message data
+    const response = {
+      ...message,
+      reactions: updatedMessage.reactions
+    };
+
+    // Broadcast the update
+    await pusherServer.trigger(
+      `channel-${message.channelId}`,
+      'message-update',
+      response
+    );
+
+    return NextResponse.json(response);
   } catch (error) {
-    console.error('[MESSAGE_REACTION]', error)
+    console.error('[REACTIONS_POST]', error)
     return new NextResponse('Internal Error', { status: 500 })
   }
 } 

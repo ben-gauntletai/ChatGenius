@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth, clerkClient, currentUser } from '@clerk/nextjs';
+import { auth } from '@clerk/nextjs';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
     console.log('\n=== Fetching Members ===');
     const { userId: currentUserId } = auth();
 
-    // First get members with their stored status
+    // Get members with their stored status
     const members = await prisma.workspaceMember.findMany({
       where: {
         workspaceId: params.workspaceId,
@@ -25,52 +25,20 @@ export async function GET(
       }
     });
 
-    // Get active users from Clerk
-    const activeUsers = await Promise.all(
-      members.map(async member => {
-        try {
-          const user = await clerkClient.users.getUser(member.userId);
-          // Check if user is signed out
-          const isSignedOut = !user.lastSignInAt;
-          
-          return {
-            userId: member.userId,
-            isActive: !isSignedOut,
-            hasImage: user.hasImage
-          };
-        } catch (error) {
-          console.error(`Failed to get user ${member.userId}:`, error);
-          return { 
-            userId: member.userId, 
-            isActive: false,
-            hasImage: false
-          };
-        }
-      })
-    );
-
-    const activeUsersMap = new Map(activeUsers.map(user => [user.userId, user]));
-
     // Update member statuses
     const updatedMembers = members.map(member => {
-      const userInfo = activeUsersMap.get(member.userId);
       const isCurrentUser = member.userId === currentUserId;
 
-      // If user is signed in or is current user, use their last manual status
-      if (userInfo?.isActive || isCurrentUser) {
+      // If user is current user, use their stored status
+      if (isCurrentUser) {
         return {
           ...member,
-          status: member.status,
-          hasImage: userInfo?.hasImage || false
+          status: member.status
         };
       }
 
-      // If user is not active, set to OFFLINE
-      return {
-        ...member,
-        status: 'OFFLINE',
-        hasImage: userInfo?.hasImage || false
-      };
+      // For other users, return their stored status
+      return member;
     });
 
     console.log('Members with status:', updatedMembers);
@@ -91,12 +59,7 @@ export async function POST(
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    const user = await currentUser();
-    if (!user) {
-      return new NextResponse('User not found', { status: 404 });
-    }
-
-    // Check if already a member and get their last status
+    // Check if already a member
     const existingMember = await prisma.workspaceMember.findFirst({
       where: {
         userId,
@@ -105,29 +68,20 @@ export async function POST(
     });
 
     if (existingMember) {
-      // If member exists, update their info but keep their status
-      const updatedMember = await prisma.workspaceMember.update({
-        where: {
-          id: existingMember.id
-        },
-        data: {
-          userName: `${user.firstName} ${user.lastName}`,
-          userImage: user.imageUrl,
-        }
-      });
-      return NextResponse.json(updatedMember);
+      // If member exists, return them without updating
+      return NextResponse.json(existingMember);
     }
 
-    // Add as new member with default ONLINE status
+    // Create new member with default values
     const member = await prisma.workspaceMember.create({
       data: {
         userId,
-        userName: `${user.firstName} ${user.lastName}`,
-        userImage: user.imageUrl,
         workspaceId: params.workspaceId,
+        userName: 'User',
+        userImage: '',
         role: 'MEMBER',
-        status: 'ONLINE'  // Default status for new members
-      },
+        status: 'ONLINE'
+      }
     });
 
     return NextResponse.json(member);

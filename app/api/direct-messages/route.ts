@@ -16,10 +16,18 @@ export async function POST(req: Request) {
     // Get both sender and receiver workspace member data
     const [sender, receiver] = await Promise.all([
       prisma.workspaceMember.findFirst({
-        where: { userId, workspaceId }
+        where: { userId, workspaceId },
+        select: {
+          userName: true,
+          userImage: true
+        }
       }),
       prisma.workspaceMember.findFirst({
-        where: { userId: receiverId, workspaceId }
+        where: { userId: receiverId, workspaceId },
+        select: {
+          userName: true,
+          userImage: true
+        }
       })
     ]);
 
@@ -39,11 +47,11 @@ export async function POST(req: Request) {
         fileType,
         workspaceId,
         senderId: userId,
-        senderName: sender.userName,
-        senderImage: sender.userImage,
+        senderName: sender.userName || 'User',
+        senderImage: sender.userImage?.startsWith('/api/files/') ? sender.userImage : null,
         receiverId,
-        receiverName: receiver.userName,
-        receiverImage: receiver.userImage,
+        receiverName: receiver.userName || 'User',
+        receiverImage: receiver.userImage?.startsWith('/api/files/') ? receiver.userImage : null,
       },
       include: {
         reactions: true
@@ -71,5 +79,62 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('[DIRECT_MESSAGES_POST]', error)
     return new NextResponse('Internal Error', { status: 500 })
+  }
+}
+
+export async function GET(req: Request) {
+  try {
+    const { userId } = auth();
+    const { searchParams } = new URL(req.url);
+    const workspaceId = searchParams.get('workspaceId');
+    const otherUserId = searchParams.get('otherUserId');
+
+    if (!userId || !workspaceId || !otherUserId) {
+      return new NextResponse('Missing required parameters', { status: 400 });
+    }
+
+    // Fetch direct messages between the two users
+    const messages = await prisma.directMessage.findMany({
+      where: {
+        workspaceId,
+        OR: [
+          { senderId: userId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: userId }
+        ]
+      },
+      orderBy: {
+        createdAt: 'asc'
+      },
+      include: {
+        reactions: true
+      }
+    });
+
+    // Format messages to match the expected structure
+    const formattedMessages = messages.map(message => ({
+      id: message.id,
+      content: message.content,
+      createdAt: message.createdAt,
+      updatedAt: message.updatedAt,
+      userId: message.senderId,
+      userName: message.senderName || 'User',
+      userImage: message.senderImage || null,
+      reactions: message.reactions || [],
+      fileUrl: message.fileUrl,
+      fileName: message.fileName,
+      fileType: message.fileType,
+      isEdited: message.updatedAt !== message.createdAt,
+      senderId: message.senderId,
+      senderName: message.senderName || 'User',
+      senderImage: message.senderImage || null,
+      receiverId: message.receiverId,
+      receiverName: message.receiverName || 'User',
+      receiverImage: message.receiverImage || null
+    }));
+
+    return NextResponse.json(formattedMessages);
+  } catch (error) {
+    console.error('[DIRECT_MESSAGES_GET]', error);
+    return new NextResponse('Internal Error', { status: 500 });
   }
 } 

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { auth, currentUser } from '@clerk/nextjs'
+import { auth } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
 
 export default async function WorkspaceLayout({
@@ -10,9 +10,8 @@ export default async function WorkspaceLayout({
   params: { workspaceId: string }
 }) {
   const { userId } = auth()
-  const user = await currentUser()
   
-  if (!userId || !user) {
+  if (!userId) {
     redirect('/sign-in')
   }
 
@@ -43,15 +42,13 @@ export default async function WorkspaceLayout({
         id: existingMember?.id || ''
       },
       update: {
-        status: 'ONLINE',
-        ...(existingMember?.userName ? {} : { userName: user.firstName + ' ' + user.lastName }),
-        ...(existingMember?.userImage ? {} : { userImage: user.imageUrl })
+        status: 'ONLINE'
       },
       create: {
         userId: userId,
         workspaceId: params.workspaceId,
-        userName: user.firstName + ' ' + user.lastName,
-        userImage: user.imageUrl,
+        userName: 'User',
+        userImage: '',
         status: 'ONLINE',
         role: 'MEMBER'
       }

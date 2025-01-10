@@ -34,19 +34,28 @@ export async function POST(req: Request) {
     console.log('Found workspace member for message:', workspaceMember); // Debug log
 
     // Ensure we have the correct profile information
-    const messageData = {
+    const messageData: any = {
       content,
       fileUrl,
       fileName,
       fileType,
       userId,
-      userName: workspaceMember.userName,
-      userImage: workspaceMember.userImage,
-      channelId,
-      workspaceId,
+      userName: workspaceMember.userName || 'User',
+      channel: {
+        connect: {
+          id: channelId
+        }
+      },
+      workspace: {
+        connect: {
+          id: workspaceId
+        }
+      }
     };
 
-    console.log('Creating message with data:', messageData); // Debug log
+    if (workspaceMember.userImage?.startsWith('/api/files/')) {
+      messageData.userImage = workspaceMember.userImage;
+    }
 
     const message = await prisma.message.create({
       data: messageData,

@@ -14,6 +14,7 @@ interface Member {
   userImage: string | null;
   status: string;
   hasCustomImage: boolean;
+  hasCustomName: boolean;
 }
 
 export default function DirectMessageList({ workspaceId }: { workspaceId: string }) {
@@ -59,11 +60,19 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
       userId: string;
       name: string;
       imageUrl: string | null;
+      hasCustomName: boolean;
+      hasCustomImage: boolean;
     }) => {
       setMembers(current =>
         current.map(member =>
           member.userId === data.userId
-            ? { ...member, userName: data.name, userImage: data.imageUrl }
+            ? {
+                ...member,
+                userName: data.hasCustomName ? data.name : 'User',
+                userImage: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null,
+                hasCustomName: data.hasCustomName,
+                hasCustomImage: data.hasCustomImage
+              }
             : member
         )
       );
@@ -75,7 +84,8 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
   }, [workspaceId]);
 
   const getDisplayName = (member: Member) => {
-    return member.userId === currentUserId ? `${member.userName} (Me)` : member.userName;
+    const name = member.hasCustomName ? member.userName : 'User';
+    return member.userId === currentUserId ? `${name} (Me)` : name;
   };
 
   return (
@@ -104,16 +114,16 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
               >
                 <div className="relative">
                   <div className="w-8 h-8 relative rounded-sm overflow-hidden">
-                    {member.userImage?.startsWith('/api/files/') ? (
+                    {member.hasCustomImage && member.userImage?.startsWith('/api/files/') ? (
                       <img
                         src={member.userImage}
-                        alt={member.userName}
+                        alt={getDisplayName(member)}
                         className="w-full h-full object-cover"
                       />
                     ) : (
                       <DefaultAvatar
                         userId={member.userId}
-                        name={member.userName}
+                        name={getDisplayName(member)}
                         className="w-full h-full rounded-sm text-xs"
                       />
                     )}

@@ -39,6 +39,7 @@ model WorkspaceMember {
   userName        String
   userImage       String?
   hasCustomImage  Boolean @default(false)
+  hasCustomName   Boolean @default(false)
   workspaceId     String
   role            Role      @default(MEMBER)
   status          String    @default("ONLINE")
@@ -71,7 +72,7 @@ model Message {
   fileType    String?
   userId      String
   userName    String
-  userImage   String
+  userImage   String?
   channelId   String
   channel     Channel   @relation("ChannelToMessage", fields: [channelId], references: [id], onDelete: Cascade)
   workspaceId String
@@ -79,6 +80,7 @@ model Message {
   thread      Thread?   @relation("MessageThread")
   parentThread Thread?  @relation("ThreadReplies", fields: [threadId], references: [id])
   threadId    String?
+  replyCount  Int      @default(0)
   reactions   Reaction[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -98,10 +100,10 @@ model DirectMessage {
   workspace     Workspace @relation("WorkspaceToDirectMessage", fields: [workspaceId], references: [id], onDelete: Cascade)
   senderId      String
   senderName    String
-  senderImage   String
+  senderImage   String?
   receiverId    String
   receiverName  String
-  receiverImage String
+  receiverImage String?
   reactions     Reaction[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -127,7 +129,7 @@ model Reaction {
   emoji           String
   userId          String
   userName        String
-  userImage       String
+  userImage       String?
   message         Message?  @relation(fields: [messageId], references: [id], onDelete: Cascade)
   messageId       String?
   directMessage   DirectMessage? @relation(fields: [directMessageId], references: [id], onDelete: Cascade)

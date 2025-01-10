@@ -244,7 +244,7 @@ export default function Message({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="relative w-10 h-10 flex-shrink-0">
-        {userImage ? (
+        {userImage?.startsWith('/api/files/') ? (
           <div className="w-full h-full relative rounded-md overflow-hidden">
             <img
               src={userImage}
