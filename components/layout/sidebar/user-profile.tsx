@@ -21,6 +21,33 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
   const [profileImage, setProfileImage] = useState<string | null>(null);
 
   useEffect(() => {
+    const fetchMemberData = async () => {
+      if (!workspaceId || !userId) return;
+
+      try {
+        const response = await fetch(`/api/workspaces/${workspaceId}/members`);
+        if (!response.ok) throw new Error('Failed to fetch members');
+        
+        const members = await response.json();
+        const currentMember = members.find((m: any) => m.userId === userId);
+        
+        if (currentMember) {
+          console.log('Found current member:', currentMember);
+          setDisplayName(currentMember.userName);
+          setProfileImage(currentMember.userImage);
+          if (currentMember.statusText) {
+            setStatusText(currentMember.statusText);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch member data:', error);
+      }
+    };
+
+    fetchMemberData();
+  }, [workspaceId, userId]);
+
+  useEffect(() => {
     if (!workspaceId) return;
 
     const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
@@ -32,6 +59,7 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
       statusText: string;
     }) => {
       if (data.userId === userId) {
+        console.log('Received profile update:', data);
         setDisplayName(data.name);
         setProfileImage(data.imageUrl);
         setStatusText(data.statusText);

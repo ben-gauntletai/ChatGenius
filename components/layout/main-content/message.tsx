@@ -244,11 +244,21 @@ export default function Message({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="relative w-10 h-10 flex-shrink-0">
-        <DefaultAvatar
-          userId={userId}
-          name={userName}
-          className="w-full h-full rounded-md"
-        />
+        {userImage ? (
+          <div className="w-full h-full relative rounded-md overflow-hidden">
+            <img
+              src={userImage}
+              alt={userName}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        ) : (
+          <DefaultAvatar
+            userId={userId}
+            name={userName}
+            className="w-full h-full rounded-md"
+          />
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">

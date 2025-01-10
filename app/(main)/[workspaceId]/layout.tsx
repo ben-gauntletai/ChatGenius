@@ -36,14 +36,16 @@ export default async function WorkspaceLayout({
     console.log('No existing member found')
   }
 
-  // Update member info while preserving status
+  // Update member info while preserving status and custom profile
   try {
     const updatedMember = await prisma.workspaceMember.upsert({
       where: {
         id: existingMember?.id || ''
       },
       update: {
-        status: 'ONLINE'
+        status: 'ONLINE',
+        ...(existingMember?.userName ? {} : { userName: user.firstName + ' ' + user.lastName }),
+        ...(existingMember?.userImage ? {} : { userImage: user.imageUrl })
       },
       create: {
         userId: userId,

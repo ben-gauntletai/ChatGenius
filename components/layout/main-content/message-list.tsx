@@ -117,6 +117,36 @@ export default function MessageList({
     };
   }, [channelId, isDM, otherUserId, userId]);
 
+  // Subscribe to profile updates
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
+
+    channel.bind('profile-update', (data: {
+      userId: string;
+      name: string;
+      imageUrl: string | null;
+    }) => {
+      console.log('Received profile update in message list:', data);
+      setMessages(prevMessages => 
+        prevMessages.map(message => 
+          message.userId === data.userId
+            ? {
+                ...message,
+                userName: data.name,
+                userImage: data.imageUrl || message.userImage
+              }
+            : message
+        )
+      );
+    });
+
+    return () => {
+      pusherClient.unsubscribe(`workspace-${workspaceId}`);
+    };
+  }, [workspaceId]);
+
   // Scroll to bottom when messages update
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -370,35 +400,6 @@ export default function MessageList({
     }
     };
   }, []);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-
-    const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
-
-    // Listen for profile updates
-    channel.bind('profile-update', (data: {
-      userId: string;
-      name: string;
-      imageUrl: string | null;
-    }) => {
-      setMessages(current =>
-        current.map(message =>
-          message.userId === data.userId
-            ? { 
-                ...message, 
-                userName: data.name,
-                userImage: data.imageUrl || message.userImage
-              }
-            : message
-        )
-      );
-    });
-
-    return () => {
-      pusherClient.unsubscribe(`workspace-${workspaceId}`);
-    };
-  }, [workspaceId]);
 
   return (
     <div className="flex-1 flex h-full">

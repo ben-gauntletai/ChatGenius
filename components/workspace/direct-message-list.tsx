@@ -13,6 +13,7 @@ interface Member {
   userName: string;
   userImage: string | null;
   status: string;
+  hasCustomImage: boolean;
 }
 
 export default function DirectMessageList({ workspaceId }: { workspaceId: string }) {
@@ -103,11 +104,19 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
               >
                 <div className="relative">
                   <div className="w-8 h-8 relative rounded-sm overflow-hidden">
-                    <DefaultAvatar
-                      userId={member.userId}
-                      name={member.userName}
-                      className="w-full h-full rounded-sm text-xs"
-                    />
+                    {member.userImage?.startsWith('/api/files/') ? (
+                      <img
+                        src={member.userImage}
+                        alt={member.userName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <DefaultAvatar
+                        userId={member.userId}
+                        name={member.userName}
+                        className="w-full h-full rounded-sm text-xs"
+                      />
+                    )}
                   </div>
                   <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#3F0E40] ${
                     member.status === 'ONLINE' ? 'bg-green-500' :

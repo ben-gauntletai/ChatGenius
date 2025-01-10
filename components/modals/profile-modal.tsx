@@ -49,6 +49,8 @@ export default function ProfileModal({
 
     try {
       setIsLoading(true);
+      console.log('Uploading file:', file.name);
+      
       const formData = new FormData();
       formData.append('file', file);
 
@@ -61,9 +63,15 @@ export default function ProfileModal({
         throw new Error('Failed to upload file');
       }
 
-      const { fileId } = await response.json();
-      const imageUrl = `/api/files/${fileId}`;
-      setUploadedImageUrl(imageUrl);
+      const data = await response.json();
+      console.log('Upload response:', data);
+      
+      if (data.url) {
+        console.log('Setting image URL:', data.url);
+        setUploadedImageUrl(data.url);
+      } else {
+        console.error('No URL received in upload response');
+      }
     } catch (error) {
       console.error('Error uploading file:', error);
     } finally {
@@ -74,6 +82,7 @@ export default function ProfileModal({
   const handleSave = async () => {
     try {
       setIsLoading(true);
+      console.log('Saving profile with image:', uploadedImageUrl);
       
       const response = await fetch('/api/profile/update', {
         method: 'PATCH',
@@ -90,6 +99,9 @@ export default function ProfileModal({
       if (!response.ok) {
         throw new Error('Failed to update profile');
       }
+
+      const data = await response.json();
+      console.log('Profile update response:', data);
 
       onClose();
     } catch (error) {

@@ -15,6 +15,18 @@ export async function POST(req: Request) {
 
     console.log('Creating message with:', { content, channelId, workspaceId, fileUrl, fileName, fileType }) // Debug log
 
+    // Get the workspace member's current profile information
+    const workspaceMember = await prisma.workspaceMember.findFirst({
+      where: {
+        userId,
+        workspaceId
+      }
+    });
+
+    if (!workspaceMember) {
+      return new NextResponse('User not found in workspace', { status: 404 })
+    }
+
     const message = await prisma.message.create({
       data: {
         content,
@@ -22,8 +34,8 @@ export async function POST(req: Request) {
         fileName,
         fileType,
         userId,
-        userName: `${user.firstName} ${user.lastName}`,
-        userImage: user.imageUrl,
+        userName: workspaceMember.userName,
+        userImage: workspaceMember.userImage || user.imageUrl,
         channelId,
         workspaceId,
       },
