@@ -34,6 +34,10 @@ export default function UserProfile({ workspaceId, onSignOut }: UserProfileProps
     }
   };
 
+  const formatStatus = (status: string) => {
+    return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  };
+
   return (
     <>
       <div className="p-2">
@@ -67,7 +71,7 @@ export default function UserProfile({ workspaceId, onSignOut }: UserProfileProps
               {currentMember.userName}
             </p>
             <p className="text-sm text-white/70 truncate">
-              {currentMember.status}
+              {formatStatus(currentMember.status)}
             </p>
           </div>
         </div>

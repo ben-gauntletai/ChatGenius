@@ -196,12 +196,12 @@ export default function Message({
     
     if (isImage) {
       return (
-        <div className="mt-2 max-w-sm">
-          <div className="relative bg-gray-50 rounded-md overflow-hidden">
+        <div className="mt-2">
+          <div className="relative bg-gray-50 rounded-md overflow-hidden w-64">
             <img
               src={fileUrl}
               alt={fileName}
-              className="rounded-md object-contain w-full max-h-[150px]"
+              className="rounded-md object-cover w-full"
             />
           </div>
           <a 
@@ -239,7 +239,7 @@ export default function Message({
 
   return (
     <div 
-      className="group relative px-4 py-2 hover:bg-gray-50 flex gap-4"
+      className="group relative px-2 py-2 hover:bg-gray-50 flex gap-2"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
