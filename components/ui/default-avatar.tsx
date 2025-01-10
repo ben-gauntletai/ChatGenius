@@ -2,13 +2,15 @@ import { getUserColor } from '@/lib/colors';
 
 export default function DefaultAvatar({ 
   userId,
+  name = 'User',
   className = ''
 }: { 
   userId?: string;
+  name?: string;
   className?: string;
 }) {
   const bgColor = userId ? getUserColor(userId) : '#6366f1';
-  const initials = 'U';
+  const initials = name.charAt(0).toUpperCase();
 
   return (
     <div 

@@ -2,6 +2,19 @@ import MessageList from '@/components/layout/main-content/message-list'
 import ChannelHeader from '@/components/layout/main-content/channel-header'
 import { prisma } from '@/lib/prisma'
 
+interface ExtendedWorkspaceMember {
+  id: string;
+  userId: string;
+  userName: string;
+  userImage: string;
+  role: string;
+  status: string;
+  lastManualStatus: string | null;
+  hasCustomName: boolean;
+  hasCustomImage: boolean;
+  workspaceId: string;
+}
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -56,19 +69,19 @@ export default async function ChannelPage({
 
   // Create a map for quick lookup
   const memberMap = new Map(
-    workspaceMembers.map(member => [member.userId, member])
+    workspaceMembers.map(member => [member.userId, member as unknown as ExtendedWorkspaceMember])
   );
 
   // Update messages with latest profile info
   const formattedMessages = messages.map(message => {
-    const member = memberMap.get(message.userId);
+    const member = memberMap.get(message.userId) as ExtendedWorkspaceMember | undefined;
     return {
       id: message.id,
       content: message.content,
       createdAt: message.createdAt,
       userId: message.userId,
-      userName: member?.userName || message.userName,
-      userImage: member?.userImage || message.userImage,
+      userName: member?.hasCustomName ? member.userName : 'User',
+      userImage: member?.hasCustomImage && member.userImage?.startsWith('/api/files/') ? member.userImage : null,
       channelId: message.channelId,
       reactions: message.reactions,
       fileUrl: message.fileUrl,

@@ -5,13 +5,17 @@ import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { ChevronDown, Users, MessageSquare, Loader2 } from 'lucide-react';
 import { useAuth } from '@clerk/nextjs';
+import { pusherClient } from '@/lib/pusher';
+import DefaultAvatar from '@/components/ui/default-avatar';
 
 interface Member {
   id: string;
   userId: string;
   userName: string;
-  userImage: string;
+  userImage: string | null;
   role: string;
+  hasCustomName: boolean;
+  hasCustomImage: boolean;
 }
 
 export default function MemberList({ workspaceId }: { workspaceId: string }) {
@@ -19,6 +23,39 @@ export default function MemberList({ workspaceId }: { workspaceId: string }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [isExpanded, setIsExpanded] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
+
+    // Listen for profile updates
+    channel.bind('profile-update', (data: {
+      userId: string;
+      name: string;
+      imageUrl: string | null;
+      hasCustomName: boolean;
+      hasCustomImage: boolean;
+    }) => {
+      setMembers(current =>
+        current.map(member =>
+          member.userId === data.userId
+            ? {
+                ...member,
+                userName: data.hasCustomName ? data.name : 'User',
+                userImage: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null,
+                hasCustomName: data.hasCustomName,
+                hasCustomImage: data.hasCustomImage
+              }
+            : member
+        )
+      );
+    });
+
+    return () => {
+      pusherClient.unsubscribe(`workspace-${workspaceId}`);
+    };
+  }, [workspaceId]);
 
   useEffect(() => {
     let mounted = true;
@@ -84,13 +121,21 @@ export default function MemberList({ workspaceId }: { workspaceId: string }) {
                 key={member.id}
                 className="flex items-center px-2 py-[6px] rounded-md text-[15px] text-white/70 hover:bg-[#350D36] group"
               >
-                <Image
-                  src={member.userImage}
-                  alt={member.userName}
-                  width={16}
-                  height={16}
-                  className="rounded-full mr-2"
-                />
+                <div className="w-4 h-4 relative rounded-sm overflow-hidden mr-2">
+                  {member.hasCustomImage && member.userImage?.startsWith('/api/files/') ? (
+                    <img
+                      src={member.userImage}
+                      alt={member.userName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <DefaultAvatar
+                      userId={member.userId}
+                      name={member.userName}
+                      className="w-full h-full text-[8px]"
+                    />
+                  )}
+                </div>
                 <span>
                   {member.userId === userId ? 'You' : member.userName}
                   {member.role === 'ADMIN' && (

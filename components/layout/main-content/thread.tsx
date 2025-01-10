@@ -71,6 +71,47 @@ export default function Thread({
     }
   }, [parentMessage.id, hasLoadedReplies])
 
+  // Listen for profile updates
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
+    
+    channel.bind('profile-update', (data: {
+      userId: string;
+      name: string;
+      imageUrl: string | null;
+      hasCustomName: boolean;
+      hasCustomImage: boolean;
+    }) => {
+      // Update parent message if it's from the same user
+      if (data.userId === localParentMessage.userId) {
+        setLocalParentMessage(current => ({
+          ...current,
+          userName: data.hasCustomName ? data.name : 'User',
+          userImage: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null
+        }));
+      }
+
+      // Update replies from the same user
+      setReplies(current =>
+        current.map(reply =>
+          reply.userId === data.userId
+            ? {
+                ...reply,
+                userName: data.hasCustomName ? data.name : 'User',
+                userImage: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null
+              }
+            : reply
+        )
+      );
+    });
+
+    return () => {
+      pusherClient.unsubscribe(`workspace-${workspaceId}`);
+    };
+  }, [workspaceId, localParentMessage.userId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newReply.trim() || isLoading) return

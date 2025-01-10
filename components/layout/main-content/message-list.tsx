@@ -217,25 +217,23 @@ export default function MessageList({
           image: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null
         }
       }));
-      
-      // Update messages for this user
-      setMessages(current =>
-        current.map(message =>
-          message.userId === data.userId
-            ? {
-                ...message,
-                userName: data.hasCustomName ? data.name : 'User',
-                userImage: data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null
-              }
-            : message
-        )
-      );
     });
 
     return () => {
       pusherClient.unsubscribe(`workspace-${workspaceId}`);
     };
   }, [workspaceId]);
+
+  // Update messages when latestProfiles changes
+  useEffect(() => {
+    setMessages(current =>
+      current.map(message => ({
+        ...message,
+        userName: latestProfiles[message.userId]?.name || message.userName,
+        userImage: latestProfiles[message.userId]?.image || message.userImage
+      }))
+    );
+  }, [latestProfiles]);
 
   // Scroll to bottom when messages update
   useEffect(() => {

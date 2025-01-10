@@ -41,10 +41,12 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
         
         if (currentMember) {
           console.log('Found current member:', currentMember);
+          
+          // Set custom flags
           setHasCustomName(currentMember.hasCustomName || false);
           setHasCustomImage(currentMember.hasCustomImage || false);
           
-          // Only use custom values if the respective flags are true
+          // Set values based on custom flags
           setDisplayName(currentMember.hasCustomName ? currentMember.userName : 'User');
           setProfileImage(currentMember.hasCustomImage && currentMember.userImage?.startsWith('/api/files/') ? currentMember.userImage : null);
           
@@ -87,10 +89,12 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
     }) => {
       if (data.userId === userId) {
         console.log('Received profile update:', data);
+        
+        // Set custom flags
         setHasCustomName(data.hasCustomName || false);
         setHasCustomImage(data.hasCustomImage || false);
         
-        // Only use custom values if the respective flags are true
+        // Set values based on custom flags
         setDisplayName(data.hasCustomName ? data.name : 'User');
         setProfileImage(data.hasCustomImage && data.imageUrl?.startsWith('/api/files/') ? data.imageUrl : null);
         setStatusText(data.statusText || "What's on your mind?");
@@ -116,7 +120,7 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
   };
 
   const handleNameChange = async (newName: string) => {
-    setDisplayName(newName || 'User');
+    setDisplayName(newName);
   };
 
   return (
@@ -171,17 +175,21 @@ export default function UserProfile({ workspaceId, status, onSignOut }: UserProf
         </button>
       </div>
 
-      <ProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        userId={userId || ''}
-        userName={displayName}
-        status={status}
-        statusText={statusText}
-        onStatusTextChange={setStatusText}
-        onNameChange={handleNameChange}
-        workspaceId={workspaceId}
-      />
+      {isProfileModalOpen && (
+        <ProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          userId={userId || ''}
+          userName={displayName}
+          status={status}
+          statusText={statusText}
+          onStatusTextChange={setStatusText}
+          onNameChange={handleNameChange}
+          workspaceId={workspaceId}
+          currentImage={profileImage}
+          hasCustomImage={hasCustomImage}
+        />
+      )}
     </>
   );
 } 

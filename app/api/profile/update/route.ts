@@ -13,12 +13,17 @@ export async function PATCH(req: Request) {
     const { name, imageUrl, statusText } = await req.json();
     console.log('Received profile update:', { name, imageUrl, statusText });
 
+    // Get current member data first
+    const currentMember = await prisma.workspaceMember.findFirst({
+      where: { userId }
+    });
+
     // Create update data object based on what's provided
     const updateData: any = {};
 
     // Only update name if provided and not empty
     if (name && name.trim() !== '') {
-      updateData.userName = name;
+      updateData.userName = name.trim();
       updateData.hasCustomName = true;
     }
 
@@ -29,11 +34,15 @@ export async function PATCH(req: Request) {
       updateData.hasCustomImage = true;
     }
 
+    // If imageUrl is explicitly null, remove custom image
+    if (imageUrl === null) {
+      updateData.userImage = '';
+      updateData.hasCustomImage = false;
+    }
+
     if (Object.keys(updateData).length === 0) {
       return new NextResponse('No valid updates provided', { status: 400 });
     }
-
-    console.log('Final update data:', updateData);
 
     // Update all workspace members for this user
     const updatedMember = await prisma.workspaceMember.updateMany({
@@ -48,11 +57,32 @@ export async function PATCH(req: Request) {
       if (updateData.userName) messageUpdateData.userName = updateData.userName;
       if (updateData.userImage) messageUpdateData.userImage = updateData.userImage;
 
-      const updatedMessages = await prisma.message.updateMany({
+      // Get all messages by this user
+      const userMessages = await prisma.message.findMany({
         where: { userId },
-        data: messageUpdateData
+        include: { reactions: true }
       });
-      console.log('Updated messages:', updatedMessages);
+
+      // Update messages and broadcast updates
+      await Promise.all(userMessages.map(async (message) => {
+        // Update the message
+        const updatedMessage = await prisma.message.update({
+          where: { id: message.id },
+          data: messageUpdateData,
+          include: { reactions: true }
+        });
+
+        // Broadcast update to channel
+        await pusherServer.trigger(
+          `channel-${message.channelId}`,
+          'message-update',
+          {
+            ...updatedMessage,
+            userName: updateData.userName,
+            userImage: updateData.userImage
+          }
+        );
+      }));
 
       // Update direct messages data
       const dmUpdateData: any = {};
@@ -65,25 +95,60 @@ export async function PATCH(req: Request) {
         dmUpdateData.receiverImage = updateData.userImage;
       }
 
-      // Update all direct messages sent by this user
-      const updatedSentDMs = await prisma.directMessage.updateMany({
+      // Get all direct messages by this user
+      const sentDMs = await prisma.directMessage.findMany({
         where: { senderId: userId },
-        data: {
-          ...(updateData.userName && { senderName: updateData.userName }),
-          ...(updateData.userImage && { senderImage: updateData.userImage })
-        }
+        include: { reactions: true }
       });
-      console.log('Updated sent DMs:', updatedSentDMs);
 
-      // Update all direct messages received by this user
-      const updatedReceivedDMs = await prisma.directMessage.updateMany({
+      const receivedDMs = await prisma.directMessage.findMany({
         where: { receiverId: userId },
-        data: {
-          ...(updateData.userName && { receiverName: updateData.userName }),
-          ...(updateData.userImage && { receiverImage: updateData.userImage })
-        }
+        include: { reactions: true }
       });
-      console.log('Updated received DMs:', updatedReceivedDMs);
+
+      // Update and broadcast sent DMs
+      await Promise.all(sentDMs.map(async (dm) => {
+        const updatedDM = await prisma.directMessage.update({
+          where: { id: dm.id },
+          data: {
+            ...(updateData.userName && { senderName: updateData.userName }),
+            ...(updateData.userImage && { senderImage: updateData.userImage })
+          },
+          include: { reactions: true }
+        });
+
+        await pusherServer.trigger(
+          `dm-${[dm.senderId, dm.receiverId].sort().join('-')}`,
+          'message-update',
+          {
+            ...updatedDM,
+            userName: updateData.userName,
+            userImage: updateData.userImage
+          }
+        );
+      }));
+
+      // Update and broadcast received DMs
+      await Promise.all(receivedDMs.map(async (dm) => {
+        const updatedDM = await prisma.directMessage.update({
+          where: { id: dm.id },
+          data: {
+            ...(updateData.userName && { receiverName: updateData.userName }),
+            ...(updateData.userImage && { receiverImage: updateData.userImage })
+          },
+          include: { reactions: true }
+        });
+
+        await pusherServer.trigger(
+          `dm-${[dm.senderId, dm.receiverId].sort().join('-')}`,
+          'message-update',
+          {
+            ...updatedDM,
+            userName: updateData.userName,
+            userImage: updateData.userImage
+          }
+        );
+      }));
     }
 
     // Get all workspaces the user is a member of

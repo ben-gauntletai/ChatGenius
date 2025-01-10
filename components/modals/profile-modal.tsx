@@ -12,6 +12,8 @@ interface ProfileModalProps {
   onStatusTextChange: (text: string) => void;
   onNameChange: (name: string) => void;
   workspaceId: string;
+  currentImage: string | null;
+  hasCustomImage: boolean;
 }
 
 export default function ProfileModal({
@@ -23,12 +25,17 @@ export default function ProfileModal({
   statusText,
   onStatusTextChange,
   onNameChange,
-  workspaceId
+  workspaceId,
+  currentImage,
+  hasCustomImage
 }: ProfileModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   
   if (!isOpen) return null;
+
+  // Use uploaded image if available, otherwise use current image
+  const displayImage = uploadedImageUrl || (hasCustomImage ? currentImage : null);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -84,13 +91,16 @@ export default function ProfileModal({
       setIsLoading(true);
       console.log('Saving profile with image:', uploadedImageUrl);
       
+      // Use 'User' as fallback if name is empty
+      const nameToSave = userName.trim() || 'User';
+      
       const response = await fetch('/api/profile/update', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: userName,
+          name: nameToSave,
           imageUrl: uploadedImageUrl,
           statusText,
         }),
@@ -103,7 +113,9 @@ export default function ProfileModal({
       const data = await response.json();
       console.log('Profile update response:', data);
 
-      onClose();
+      if (data.success) {
+        onClose();
+      }
     } catch (error) {
       console.error('Error saving profile changes:', error);
     } finally {
@@ -132,9 +144,9 @@ export default function ProfileModal({
           <div className="flex flex-col items-center mb-6">
             <div className="relative mb-4">
               <div className="w-24 h-24 rounded-lg overflow-hidden">
-                {uploadedImageUrl ? (
+                {displayImage ? (
                   <img
-                    src={uploadedImageUrl}
+                    src={displayImage}
                     alt={userName}
                     className="w-full h-full object-cover"
                   />
