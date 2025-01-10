@@ -29,23 +29,40 @@ export async function POST(req: Request) {
 
   // Verify the payload with the headers
   try {
+    console.log('\n=== Webhook Verification ===');
+    console.log('Headers:', {
+      'svix-id': svix_id,
+      'svix-timestamp': svix_timestamp,
+      'svix-signature': svix_signature
+    });
+    console.log('Secret:', process.env.CLERK_WEBHOOK_SECRET?.substring(0, 10) + '...');
+    console.log('Body:', body);
+
     evt = wh.verify(body, {
       "svix-id": svix_id,
       "svix-timestamp": svix_timestamp,
       "svix-signature": svix_signature,
     }) as WebhookEvent;
   } catch (err) {
-    console.error('Error verifying webhook:', err);
-    return new Response('Error occured', {
-      status: 400
+    console.error('\n=== Webhook Verification Error ===');
+    console.error('Error:', err);
+    console.error('Error message:', (err as Error).message);
+    return new Response('Error verifying webhook signature', {
+      status: 401
     });
   }
 
   // Handle the webhook
   const eventType = evt.type;
+  console.log('\n=== Webhook Event ===');
+  console.log('Event Type:', eventType);
+  console.log('Event Data:', evt.data);
 
-  if (eventType === 'session.ended') {
+  // Handle both session.ended and session.removed events
+  if (eventType === 'session.ended' || eventType === 'session.removed') {
     const { user_id } = evt.data;
+    console.log('\n=== Session Ended/Removed ===');
+    console.log('User ID:', user_id);
 
     try {
       // Find all workspace memberships for the user
@@ -55,10 +72,17 @@ export async function POST(req: Request) {
         }
       });
 
+      console.log('\n=== Found Members ===');
+      console.log('Members:', members);
+
       // Update status to offline for all memberships
       for (const member of members) {
+        console.log('\n=== Updating Member ===');
+        console.log('Member ID:', member.id);
+        console.log('Current Status:', member.status);
+        
         // Only update lastActiveStatus if current status isn't already OFFLINE
-        await prisma.workspaceMember.update({
+        const updatedMember = await prisma.workspaceMember.update({
           where: {
             id: member.id
           },
@@ -69,6 +93,8 @@ export async function POST(req: Request) {
             status: 'OFFLINE'
           }
         });
+
+        console.log('Updated Status:', updatedMember.status);
 
         // Broadcast status change to all workspace members
         await pusherServer.trigger(
