@@ -50,10 +50,8 @@ export default async function Home() {
         id: existingMember?.id || ''
       },
       update: {
-        // Only update status if member exists
-        ...(existingMember && {
-          status: existingMember.status
-        })
+        // Only set status to ONLINE if member doesn't exist
+        ...(existingMember ? {} : { status: 'ONLINE' })
       },
       create: {
         userId: userId,

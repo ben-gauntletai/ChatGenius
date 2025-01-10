@@ -42,7 +42,7 @@ export default async function WorkspaceLayout({
         id: existingMember?.id || ''
       },
       update: {
-        status: 'ONLINE'
+        ...(existingMember ? {} : { status: 'ONLINE' })
       },
       create: {
         userId: userId,
