@@ -78,8 +78,13 @@ export default function MessageList({
     }
   }, [channelId, isDM, otherUserId, userId])
 
-  // Get filtered messages for this channel
-  const messages = channelId ? getChannelMessages(channelId) : []
+  // Get filtered messages for this channel or DM
+  const messages = isDM 
+    ? Object.values(allMessages)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    : channelId 
+      ? getChannelMessages(channelId) 
+      : [];
 
   // Update messages with latest member info
   useEffect(() => {
@@ -152,6 +157,30 @@ export default function MessageList({
 
     const handleMessage = (message: MessageType) => {
       console.log('Received message:', message);
+      
+      // For DMs, add all messages
+      if (isDM) {
+        setAllMessages(current => ({
+          ...current,
+          [message.id]: {
+            ...message,
+            userName: message.userName || current[message.id]?.userName,
+            userImage: message.userImage || current[message.id]?.userImage
+          }
+        }));
+        
+        setTimeout(() => {
+          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+        return;
+      }
+      
+      // For regular messages, skip thread messages
+      if (message.threadId || message.isThreadReply) {
+        console.log('Skipping thread message:', message);
+        return;
+      }
+      
       setAllMessages(current => ({
         ...current,
         [message.id]: {
@@ -162,11 +191,9 @@ export default function MessageList({
       }));
 
       // Scroll for new main messages
-      if (!message.threadId && !message.isThreadReply) {
-        setTimeout(() => {
-          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-      }
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     };
 
     const handleDelete = (messageId: string) => {
