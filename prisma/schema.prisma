@@ -84,6 +84,8 @@ model Message {
   thread      Thread?   @relation("MessageThread")
   parentThread Thread?  @relation("ThreadReplies", fields: [threadId], references: [id])
   threadId    String?
+  isThreadReply Boolean @default(false)
+  parentMessageId String?
   replyCount  Int      @default(0)
   reactions   Reaction[]
   createdAt   DateTime  @default(now())
@@ -92,6 +94,7 @@ model Message {
   @@index([channelId])
   @@index([workspaceId])
   @@index([threadId])
+  @@index([parentMessageId])
 }
 
 model DirectMessage {

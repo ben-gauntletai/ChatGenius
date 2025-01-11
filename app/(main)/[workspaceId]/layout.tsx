@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { redirect } from 'next/navigation';
 import ProfileModal from '@/components/modals/profile-modal';
 import { getWorkspaceData } from './actions';
+import { WorkspaceMembersProvider } from '@/contexts/workspace-members-context';
+import { MessageProvider } from '@/contexts/message-context';
+import { PusherProvider } from '@/contexts/pusher-context';
 
 export default function WorkspaceLayout({
   children,
@@ -43,7 +46,13 @@ export default function WorkspaceLayout({
           isFirstLogin={true}
         />
       )}
-      {children}
+      <WorkspaceMembersProvider workspaceId={params.workspaceId}>
+        <MessageProvider>
+          <PusherProvider>
+            {children}
+          </PusherProvider>
+        </MessageProvider>
+      </WorkspaceMembersProvider>
     </>
   );
 } 

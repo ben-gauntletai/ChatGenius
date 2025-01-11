@@ -8,6 +8,8 @@ import Thread from './thread'
 import { PaperclipIcon, X } from 'lucide-react'
 import { Message as MessageType, Reaction } from '@/types'
 import { useWorkspaceMembers } from '@/contexts/workspace-members-context'
+import { useMessages } from '@/contexts/message-context'
+import { usePusher } from '@/contexts/pusher-context'
 
 interface Profile {
   name: string;
@@ -29,7 +31,11 @@ export default function MessageList({
 }) {
   const { userId } = useAuth()
   const { members } = useWorkspaceMembers()
-  const [messages, setMessages] = useState<MessageType[]>(initialMessages)
+  const { getChannelMessages, addMessage, updateMessage, deleteMessage } = useMessages()
+  const { subscribeToChannel, unsubscribeFromChannel } = usePusher()
+  const [allMessages, setAllMessages] = useState<{
+    [key: string]: MessageType
+  }>({});
   const [activeThread, setActiveThread] = useState<MessageType | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -52,20 +58,48 @@ export default function MessageList({
     type: string;
   } | null>(null);
 
+  // Initialize messages
+  useEffect(() => {
+    initialMessages.forEach(addMessage)
+  }, [])
+
+  // Subscribe to channel
+  useEffect(() => {
+    if (!channelId && !isDM) return
+    
+    const channelName = isDM 
+      ? `dm-${[otherUserId, userId].sort().join('-')}` 
+      : `channel-${channelId}`
+
+    subscribeToChannel(channelName)
+    
+    return () => {
+      unsubscribeFromChannel(channelName)
+    }
+  }, [channelId, isDM, otherUserId, userId])
+
+  // Get filtered messages for this channel
+  const messages = channelId ? getChannelMessages(channelId) : []
+
   // Update messages with latest member info
   useEffect(() => {
     if (!members.length) return;
 
-    setMessages(current =>
-      current.map(message => {
+    setAllMessages(current => {
+      const updated = { ...current };
+      Object.keys(current).forEach(id => {
+        const message = current[id];
         const member = members.find(m => m.userId === message.userId);
-        return {
-          ...message,
-          userName: member?.userName || message.userName,
-          userImage: member?.userImage || message.userImage
-        };
-      })
-    );
+        if (member) {
+          updated[id] = {
+            ...message,
+            userName: member.userName || message.userName,
+            userImage: member.userImage || message.userImage
+          };
+        }
+      });
+      return updated;
+    });
   }, [members]);
 
   // Fetch messages when channel or DM user changes
@@ -76,19 +110,9 @@ export default function MessageList({
       try {
         let response;
         if (isDM && workspaceId && otherUserId) {
-          response = await fetch(`/api/direct-messages?workspaceId=${workspaceId}&otherUserId=${otherUserId}`, {
-            cache: 'no-store',
-            headers: {
-              'Cache-Control': 'no-cache'
-            }
-          });
+          response = await fetch(`/api/direct-messages?workspaceId=${workspaceId}&otherUserId=${otherUserId}`);
         } else if (channelId) {
-          response = await fetch(`/api/channels/${channelId}/messages`, {
-            cache: 'no-store',
-            headers: {
-              'Cache-Control': 'no-cache'
-            }
-          });
+          response = await fetch(`/api/channels/${channelId}/messages`);
         } else {
           return;
         }
@@ -96,14 +120,16 @@ export default function MessageList({
         if (!response.ok) throw new Error('Failed to fetch messages');
         
         const data = await response.json();
-        setMessages(data.map((message: MessageType) => {
+        const messageMap: { [key: string]: MessageType } = {};
+        data.forEach((message: MessageType) => {
           const member = members.find(m => m.userId === message.userId);
-          return {
+          messageMap[message.id] = {
             ...message,
             userName: member?.userName || message.userName,
             userImage: member?.userImage || message.userImage
           };
-        }));
+        });
+        setAllMessages(messageMap);
       } catch (error) {
         console.error('Error fetching messages:', error);
       }
@@ -120,68 +146,47 @@ export default function MessageList({
       ? `dm-${[otherUserId, userId].sort().join('-')}` 
       : `channel-${channelId}`
     
+    console.log('Subscribing to channel:', channelName);
     pusherClient.unsubscribe(channelName);
     const channel = pusherClient.subscribe(channelName);
 
-    // Bind events
-    const newMessageHandler = async (message: MessageType) => {
-      console.log('Received new message:', message);
-      setMessages(current => {
-        // Check if message already exists to prevent duplicates
-        const exists = current.some(m => m.id === message.id);
-        if (exists) return current;
-        
-        // Use latest member info
-        const member = members.find(m => m.userId === message.userId);
-        const updatedMessage = member ? {
+    const handleMessage = (message: MessageType) => {
+      console.log('Received message:', message);
+      setAllMessages(current => ({
+        ...current,
+        [message.id]: {
           ...message,
-          userName: member.userName,
-          userImage: member.userImage
-        } : message;
-        
-        return [...current, updatedMessage];
+          userName: message.userName || current[message.id]?.userName,
+          userImage: message.userImage || current[message.id]?.userImage
+        }
+      }));
+
+      // Scroll for new main messages
+      if (!message.threadId && !message.isThreadReply) {
+        setTimeout(() => {
+          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
+    };
+
+    const handleDelete = (messageId: string) => {
+      setAllMessages(current => {
+        const { [messageId]: deleted, ...rest } = current;
+        return rest;
       });
-      
-      // Always scroll to bottom when new message arrives
-      setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
     };
 
-    const updateMessageHandler = (updatedMessage: MessageType) => {
-      console.log('Received message update:', updatedMessage);
-      setMessages(current =>
-        current.map(message =>
-          message.id === updatedMessage.id
-            ? {
-                ...message,
-                ...updatedMessage,
-                userName: updatedMessage.userName || message.userName,
-                userImage: updatedMessage.userImage || message.userImage,
-                reactions: updatedMessage.reactions
-              }
-            : message
-        )
-      );
-    };
-
-    const deleteMessageHandler = (messageId: string) => {
-      setMessages(current =>
-        current.filter(message => message.id !== messageId)
-      );
-    };
-
-    channel.bind('new-message', newMessageHandler);
-    channel.bind('message-update', updateMessageHandler);
-    channel.bind('message-delete', deleteMessageHandler);
+    channel.bind('new-message', handleMessage);
+    channel.bind('message-update', handleMessage);
+    channel.bind('message-delete', handleDelete);
 
     return () => {
-      channel.unbind('new-message', newMessageHandler);
-      channel.unbind('message-update', updateMessageHandler);
-      channel.unbind('message-delete', deleteMessageHandler);
+      channel.unbind('new-message', handleMessage);
+      channel.unbind('message-update', handleMessage);
+      channel.unbind('message-delete', handleDelete);
       pusherClient.unsubscribe(channelName);
     };
-  }, [channelId, isDM, otherUserId, userId, members]);
+  }, [channelId, isDM, otherUserId, userId]);
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -194,21 +199,14 @@ export default function MessageList({
 
     try {
       let uploadResult;
-      
-      // Handle file upload first if there's a file
       if (selectedFile) {
         const formData = new FormData();
         formData.append('file', selectedFile);
-        
         const uploadResponse = await fetch('/api/upload', {
           method: 'POST',
           body: formData
         });
-
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload file');
-        }
-
+        if (!uploadResponse.ok) throw new Error('Failed to upload file');
         uploadResult = await uploadResponse.json();
       }
 
@@ -236,7 +234,6 @@ export default function MessageList({
       }
     } catch (error) {
       console.error('Error sending message:', error)
-      // Add user feedback here
       alert('Failed to send message. Please try again.')
     }
   }
@@ -270,9 +267,10 @@ export default function MessageList({
       }
 
       // Optimistically remove the message from the UI
-      setMessages(current =>
-        current.filter(message => message.id !== messageId)
-      )
+      setAllMessages(current => {
+        const { [messageId]: deleted, ...rest } = current;
+        return rest;
+      });
     } catch (error) {
       console.error('Failed to delete message:', error)
     }
@@ -320,13 +318,14 @@ export default function MessageList({
 
       const updatedMessage = await response.json()
       
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === messageId
-            ? { ...message, reactions: updatedMessage.reactions }
-            : message
-        )
-      )
+      setAllMessages(current => {
+        const updated = { ...current };
+        updated[messageId] = {
+          ...updated[messageId],
+          reactions: updatedMessage.reactions
+        };
+        return updated;
+      });
     } catch (error) {
       console.error('Failed to add reaction:', error)
     }
@@ -348,13 +347,14 @@ export default function MessageList({
 
       const updatedMessage = await response.json()
       
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === messageId
-            ? { ...message, reactions: updatedMessage.reactions }
-            : message
-        )
-      )
+      setAllMessages(current => {
+        const updated = { ...current };
+        updated[messageId] = {
+          ...updated[messageId],
+          reactions: updatedMessage.reactions
+        };
+        return updated;
+      });
     } catch (error) {
       console.error('Failed to remove reaction:', error)
     }
@@ -369,13 +369,14 @@ export default function MessageList({
   }
 
   const handleReplyCountChange = (messageId: string, newCount: number) => {
-    setMessages(current =>
-      current.map(message =>
-        message.id === messageId
-          ? { ...message, replyCount: newCount }
-          : message
-      )
-    )
+    setAllMessages(current => {
+      const updated = { ...current };
+      updated[messageId] = {
+        ...updated[messageId],
+        replyCount: newCount
+      };
+      return updated;
+    });
   }
 
   const handleEmojiButtonClick = () => {

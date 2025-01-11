@@ -1,6 +1,8 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
+import { MessageProvider } from '@/contexts/message-context'
+import { PusherProvider } from '@/contexts/pusher-context'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -15,10 +17,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body className={inter.className}>{children}</body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <body className={inter.className}>
+        <ClerkProvider>
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
   )
 } 

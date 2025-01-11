@@ -8,23 +8,37 @@ export async function GET(
   { params }: { params: { messageId: string } }
 ) {
   try {
-    const messageThread = await prisma.thread.findFirst({
-      where: {
-        messageId: params.messageId
-      },
+    // Get the parent message and its thread messages
+    const parentMessage = await prisma.message.findUnique({
+      where: { id: params.messageId },
       include: {
-        replies: {
+        reactions: true,
+        thread: {
           include: {
-            reactions: true
-          },
-          orderBy: {
-            createdAt: 'asc'
+            replies: {
+              include: {
+                reactions: true
+              },
+              orderBy: {
+                createdAt: 'asc'
+              }
+            }
           }
         }
       }
     })
 
-    return NextResponse.json(messageThread?.replies || [])
+    if (!parentMessage) {
+      return new NextResponse('Message not found', { status: 404 })
+    }
+
+    // Format the response to include both parent message and replies
+    const threadMessages = [
+      parentMessage,
+      ...(parentMessage.thread?.replies || [])
+    ]
+
+    return NextResponse.json(threadMessages)
   } catch (error) {
     console.error('[THREAD_GET]', error)
     return new NextResponse('Internal Error', { status: 500 })
@@ -49,16 +63,16 @@ export async function POST(
     }
 
     // Handle regular message thread
-    const message = await prisma.message.findUnique({
+    const parentMessage = await prisma.message.findUnique({
       where: { id: params.messageId },
       include: { thread: true }
     })
 
-    if (!message) {
+    if (!parentMessage) {
       return new NextResponse('Message not found', { status: 404 })
     }
 
-    const thread = message.thread || await prisma.thread.create({
+    const thread = parentMessage.thread || await prisma.thread.create({
       data: {
         messageId: params.messageId
       }
@@ -68,7 +82,7 @@ export async function POST(
     const member = await prisma.workspaceMember.findFirst({
       where: {
         userId,
-        workspaceId: message.workspaceId
+        workspaceId: parentMessage.workspaceId
       }
     })
 
@@ -83,26 +97,17 @@ export async function POST(
         userId,
         userName: member.userName || 'User',
         userImage: member.userImage?.startsWith('/api/files/') ? member.userImage : '',
-        workspaceId: message.workspaceId,
-        channelId: message.channelId,
-        threadId: thread.id
+        workspaceId: parentMessage.workspaceId,
+        channelId: parentMessage.channelId,
+        threadId: thread.id,
+        isThreadReply: true,
+        parentMessageId: params.messageId
       },
       include: {
         reactions: true,
         thread: true
       }
     });
-
-    // Format the thread message
-    const formattedMessage = {
-      ...threadMessage,
-      isThreadReply: true,
-      parentMessageId: params.messageId,
-      thread: {
-        id: thread.id,
-        messageId: params.messageId
-      }
-    };
 
     // Get the updated reply count
     const replyCount = await prisma.message.count({
@@ -121,32 +126,33 @@ export async function POST(
       }
     });
 
-    // Format the parent message update
-    const formattedParentUpdate = {
-      ...updatedParentMessage,
-      replyCount,
-      thread: {
-        id: thread.id,
-        messageId: params.messageId,
-        lastReply: formattedMessage
-      }
+    // Format the messages for the response
+    const formattedThreadMessage = {
+      ...threadMessage,
+      isThreadReply: true,
+      parentMessageId: params.messageId
     };
 
-    // Send the thread message
+    const formattedParentMessage = {
+      ...updatedParentMessage,
+      replyCount
+    };
+
+    // Send the thread message to the channel
     await pusherServer.trigger(
-      `channel-${message.channelId}`,
+      `channel-${parentMessage.channelId}`,
       'new-message',
-      formattedMessage
+      formattedThreadMessage
     );
 
-    // Send the parent message update
+    // Send the parent message update to the channel
     await pusherServer.trigger(
-      `channel-${message.channelId}`,
+      `channel-${parentMessage.channelId}`,
       'message-update',
-      formattedParentUpdate
+      formattedParentMessage
     );
 
-    return NextResponse.json(formattedMessage);
+    return NextResponse.json(formattedThreadMessage);
   } catch (error) {
     console.error('[THREAD_POST]', error)
     return new NextResponse('Internal Error', { status: 500 })

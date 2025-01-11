@@ -1,5 +1,4 @@
-import MessageList from '@/components/layout/main-content/message-list'
-import ChannelHeader from '@/components/layout/main-content/channel-header'
+import ChannelContent from '@/components/layout/main-content/channel-content'
 import { prisma } from '@/lib/prisma'
 
 interface ExtendedWorkspaceMember {
@@ -92,16 +91,11 @@ export default async function ChannelPage({
   });
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <ChannelHeader name={channel.name} />
-      <div className="flex-1 overflow-y-auto">
-        <MessageList 
-          key={params.channelId}
-          initialMessages={formattedMessages} 
-          channelId={params.channelId}
-          workspaceId={params.workspaceId}
-        />
-      </div>
-    </div>
+    <ChannelContent
+      name={channel.name}
+      initialMessages={formattedMessages}
+      channelId={params.channelId}
+      workspaceId={params.workspaceId}
+    />
   );
 } 
