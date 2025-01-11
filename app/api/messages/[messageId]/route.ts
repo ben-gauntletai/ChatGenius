@@ -15,37 +15,62 @@ export async function PATCH(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
+    // First get the original message to check if it's a thread message
+    const originalMessage = await prisma.message.findUnique({
+      where: { id: params.messageId },
+      include: {
+        reactions: true,
+        thread: true
+      }
+    });
+
+    if (!originalMessage) {
+      return new NextResponse('Message not found', { status: 404 })
+    }
+
+    // Update the message
     const message = await prisma.message.update({
       where: {
         id: params.messageId,
-        userId // Ensure the user owns the message
+        userId
       },
       data: {
         content
       },
       include: {
-        reactions: true
+        reactions: true,
+        thread: true
       }
     })
 
-    // Only broadcast to the appropriate channel
-    if (message.threadId) {
-      // If it's a thread message, only broadcast to the thread
-      await pusherServer.trigger(
-        `thread-${message.threadId}`,
-        'message-update',
-        message
-      )
-    } else {
-      // If it's a regular message, broadcast to the channel
-      await pusherServer.trigger(
-        `channel-${message.channelId}`,
-        'message-update',
-        message
-      )
-    }
+    // Format the message to ensure consistency with new messages
+    const formattedMessage = {
+      ...message,
+      isThreadReply: !!message.threadId,
+      parentMessageId: message.threadId ? originalMessage.thread?.messageId : undefined,
+      thread: message.thread ? {
+        id: message.thread.id,
+        messageId: message.thread.messageId
+      } : undefined
+    };
 
-    return NextResponse.json(message)
+    console.log('Sending message update:', {
+      messageId: message.id,
+      content: message.content,
+      threadId: message.threadId,
+      isThreadReply: !!message.threadId,
+      parentMessageId: message.threadId ? originalMessage.thread?.messageId : undefined,
+      thread: formattedMessage.thread
+    });
+
+    // Send update to channel
+    await pusherServer.trigger(
+      `channel-${message.channelId}`,
+      'message-update',
+      formattedMessage
+    );
+
+    return NextResponse.json(formattedMessage)
   } catch (error) {
     console.error('[MESSAGE_PATCH]', error)
     return new NextResponse('Internal Error', { status: 500 })

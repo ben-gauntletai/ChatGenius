@@ -132,14 +132,14 @@ export async function POST(
       }
     };
 
-    // First send the thread message
+    // Send the thread message
     await pusherServer.trigger(
       `channel-${message.channelId}`,
       'new-message',
       formattedMessage
     );
 
-    // Then send the parent message update
+    // Send the parent message update
     await pusherServer.trigger(
       `channel-${message.channelId}`,
       'message-update',

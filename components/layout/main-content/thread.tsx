@@ -69,116 +69,82 @@ export default function Thread({
     if (!channelId) return;
 
     const channel = pusherClient.subscribe(`channel-${channelId}`);
+    console.log('Thread subscribing to channel:', channelId);
     
-    // Handle new messages
-    const handleMessage = (message: MessageType) => {
-      console.log('Thread received message:', {
-        message,
-        isThreadReply: message.isThreadReply,
-        parentMessageId: message.parentMessageId,
-        thisThreadId: parentMessage.id
-      });
-
-      // If it's a thread reply for this thread
-      if (message.isThreadReply && message.parentMessageId === parentMessage.id) {
-        setReplies((current) => {
+    const handleNewMessage = (message: MessageType) => {
+      console.log('Thread received new message:', message);
+      if (message.threadId && message.parentMessageId === parentMessage.id) {
+        setReplies(current => {
           if (current.some(r => r.id === message.id)) return current;
-          return [...current, message].sort((a, b) => 
+          const newReplies = [...current, message].sort((a, b) => 
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           );
+          console.log('Updated replies:', newReplies);
+          return newReplies;
         });
-
         requestAnimationFrame(() => {
           bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
         });
       }
     };
 
-    // Handle message updates (including reactions)
-    const handleMessageUpdate = (message: MessageType) => {
+    const handleUpdate = (message: MessageType) => {
       console.log('Thread received update:', {
-        message,
-        parentMessageId: parentMessage.id,
-        currentReplies: replies
+        messageId: message.id,
+        content: message.content,
+        threadId: message.threadId,
+        isThreadReply: message.isThreadReply,
+        parentMessageId: message.parentMessageId,
+        receivedThread: message.thread,
+        expectedParentId: parentMessage.id,
+        currentReplies: replies.map(r => r.id)
       });
 
       // If it's the parent message
       if (message.id === parentMessage.id) {
-        console.log('Updating parent message with:', message);
-        setLocalParentMessage(current => {
-          const updated = {
-            ...current,
-            content: message.content !== undefined ? message.content : current.content,
-            reactions: message.reactions !== undefined ? message.reactions : current.reactions,
-            replyCount: message.replyCount !== undefined ? message.replyCount : current.replyCount,
-            thread: message.thread || current.thread
-          };
-          console.log('Updated parent message:', updated);
-          return updated;
-        });
-
-        // If there's a new reply in the update
-        if (message.thread?.lastReply) {
-          setReplies(current => {
-            if (current.some(r => r.id === message.thread!.lastReply!.id)) return current;
-            return [...current, message.thread!.lastReply!].sort((a, b) => 
-              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            );
-          });
-
-          requestAnimationFrame(() => {
-            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-          });
-        }
+        console.log('Updating parent message');
+        setLocalParentMessage(message);
+      } 
+      // If it's a reply in this thread
+      else if (
+        (message.threadId && message.parentMessageId === parentMessage.id) || // New format
+        (message.isThreadReply && message.parentMessageId === parentMessage.id) || // Alternative format
+        replies.some(reply => reply.id === message.id) // Fallback check
+      ) {
+        console.log('Updating reply:', message.id);
+        setReplies(current => 
+          current.map(reply => 
+            reply.id === message.id ? message : reply
+          )
+        );
       } else {
-        // Update thread replies (including reactions)
-        setReplies(current => {
-          const updated = current.map(reply => {
-            if (reply.id === message.id) {
-              console.log('Updating reply:', reply.id, 'with:', message);
-              return {
-                ...reply,
-                content: message.content !== undefined ? message.content : reply.content,
-                reactions: message.reactions !== undefined ? message.reactions : reply.reactions
-              };
-            }
-            return reply;
-          });
-          console.log('Updated replies:', updated);
-          return updated;
-        });
+        console.log('Message update ignored - not relevant to this thread');
       }
     };
 
-    // Handle message deletions
-    const handleMessageDelete = (messageId: string) => {
+    const handleDelete = (messageId: string) => {
       console.log('Thread received delete:', messageId);
-
-      // If parent message is deleted, close the thread
       if (messageId === parentMessage.id) {
         onClose();
-        return;
+      } else {
+        setReplies(current => {
+          const newReplies = current.filter(reply => reply.id !== messageId);
+          if (newReplies.length !== current.length) {
+            onReplyCountChange?.(parentMessage.id, newReplies.length);
+          }
+          return newReplies;
+        });
       }
-
-      // Remove the message from replies
-      setReplies(current => {
-        const newReplies = current.filter(reply => reply.id !== messageId);
-        // Update reply count after deletion
-        if (newReplies.length !== current.length) {
-          onReplyCountChange?.(parentMessage.id, newReplies.length);
-        }
-        return newReplies;
-      });
     };
 
-    channel.bind('new-message', handleMessage);
-    channel.bind('message-update', handleMessageUpdate);
-    channel.bind('message-delete', handleMessageDelete);
+    channel.bind('new-message', handleNewMessage);
+    channel.bind('message-update', handleUpdate);
+    channel.bind('message-delete', handleDelete);
 
     return () => {
-      channel.unbind('new-message', handleMessage);
-      channel.unbind('message-update', handleMessageUpdate);
-      channel.unbind('message-delete', handleMessageDelete);
+      channel.unbind('new-message', handleNewMessage);
+      channel.unbind('message-update', handleUpdate);
+      channel.unbind('message-delete', handleDelete);
       pusherClient.unsubscribe(`channel-${channelId}`);
     };
   }, [channelId, parentMessage.id, onClose, onReplyCountChange]);
