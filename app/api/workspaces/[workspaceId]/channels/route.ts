@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
-import { pusherServer } from '@/lib/pusher'
-import { EVENTS } from '@/lib/pusher-events'
+import { revalidatePath } from 'next/cache'
 
 export async function GET(
   req: Request,
@@ -46,17 +45,9 @@ export async function POST(
       }
     })
 
-    // Trigger Pusher event for channel creation
-    await pusherServer.trigger(
-      `workspace-${params.workspaceId}`,
-      EVENTS.CHANNEL_CREATE,
-      {
-        id: channel.id,
-        name: channel.name,
-        workspaceId: channel.workspaceId,
-        description: channel.description
-      }
-    )
+    // Revalidate the workspace page and channel list
+    revalidatePath(`/${params.workspaceId}`)
+    revalidatePath(`/api/workspaces/${params.workspaceId}/channels`)
 
     return NextResponse.json(channel)
   } catch (error) {

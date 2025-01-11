@@ -5,6 +5,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronDown, Hash, MessageSquare, Trash2, Plus, LogOut, Search } from 'lucide-react'
 import { useClerk, useAuth } from "@clerk/nextjs"
+import useSWR from 'swr'
 import MemberList from '@/components/workspace/member-list'
 import AddChannelModal from '@/components/modals/add-channel-modal'
 import DeleteChannelModal from '@/components/modals/delete-channel-modal'
@@ -21,6 +22,8 @@ interface Channel {
   name: string
 }
 
+const fetcher = (url: string) => fetch(url).then(res => res.json())
+
 export default function MainLayout({
   children
 }: {
@@ -31,7 +34,6 @@ export default function MainLayout({
   const router = useRouter()
   const { signOut } = useClerk()
   const { userId } = useAuth()
-  const [channels, setChannels] = useState<Channel[]>([])
   const [showAddChannel, setShowAddChannel] = useState(false)
   const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null)
   const [isChannelListExpanded, setIsChannelListExpanded] = useState(true)
@@ -40,11 +42,20 @@ export default function MainLayout({
   const [isSearching, setIsSearching] = useState(false)
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
 
-  const handleChannelAdded = async () => {
+  // Use SWR to fetch and automatically revalidate channels
+  const { data: channels = [], mutate } = useSWR<Channel[]>(
+    `/api/workspaces/${params.workspaceId}/channels`,
+    fetcher,
+    {
+      refreshInterval: 1000, // Poll every second
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true
+    }
+  )
+
+  const handleChannelAdded = () => {
     setShowAddChannel(false)
-    const response = await fetch(`/api/workspaces/${params.workspaceId}/channels`)
-    const data = await response.json()
-    setChannels(data)
+    mutate() // Trigger revalidation
   }
 
   const handleDeleteChannel = async () => {
@@ -58,21 +69,16 @@ export default function MainLayout({
 
       if (!response.ok) throw new Error('Failed to delete channel')
 
-      // Update local state immediately
-      setChannels(current => current.filter(ch => ch.id !== channelToDelete.id))
-
       // If we're on the deleted channel's page, redirect to the first available channel
       if (pathname === `/${params.workspaceId}/${channelToDelete.id}`) {
-        setChannels(current => {
-          if (current.length > 0) {
-            router.push(`/${params.workspaceId}/${current[0].id}`)
-          }
-          return current
-        })
+        const remainingChannels = channels.filter(ch => ch.id !== channelToDelete.id)
+        if (remainingChannels.length > 0) {
+          router.push(`/${params.workspaceId}/${remainingChannels[0].id}`)
+        }
       }
 
-      // Close the modal
       setChannelToDelete(null)
+      mutate() // Trigger revalidation
     } catch (error) {
       console.error('Error deleting channel:', error)
     }
@@ -81,67 +87,8 @@ export default function MainLayout({
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (!searchQuery.trim()) return
-    
-    // Navigate to search results page
     router.push(`/${params.workspaceId}/search?q=${encodeURIComponent(searchQuery)}`)
   }
-
-  useEffect(() => {
-    const fetchChannels = async () => {
-      try {
-        const response = await fetch(`/api/workspaces/${params.workspaceId}/channels`)
-        const data = await response.json()
-        setChannels(data)
-      } catch (error) {
-        console.error('Error fetching channels:', error)
-        setChannels([])
-      }
-    }
-
-    if (params.workspaceId) {
-      fetchChannels()
-    }
-  }, [params.workspaceId])
-
-  // Subscribe to channel events
-  useEffect(() => {
-    if (!params.workspaceId) return;
-
-    const channel = pusherClient.subscribe(`workspace-${params.workspaceId}`);
-
-    // Handle new channel creation
-    const handleChannelCreate = (newChannel: ChannelEvent) => {
-      setChannels(current => {
-        const exists = current.some(ch => ch.id === newChannel.id);
-        if (exists) return current;
-        return [...current, { id: newChannel.id, name: newChannel.name }];
-      });
-    };
-
-    // Handle channel deletion
-    const handleChannelDelete = (deletedChannel: ChannelEvent) => {
-      setChannels(current => current.filter(ch => ch.id !== deletedChannel.id));
-      
-      // If we're on the deleted channel's page, redirect to the first available channel
-      if (pathname === `/${params.workspaceId}/${deletedChannel.id}`) {
-        setChannels(current => {
-          if (current.length > 0) {
-            router.push(`/${params.workspaceId}/${current[0].id}`);
-          }
-          return current;
-        });
-      }
-    };
-
-    channel.bind(EVENTS.CHANNEL_CREATE, handleChannelCreate);
-    channel.bind(EVENTS.CHANNEL_DELETE, handleChannelDelete);
-
-    return () => {
-      channel.unbind(EVENTS.CHANNEL_CREATE, handleChannelCreate);
-      channel.unbind(EVENTS.CHANNEL_DELETE, handleChannelDelete);
-      pusherClient.unsubscribe(`workspace-${params.workspaceId}`);
-    };
-  }, [params.workspaceId, pathname, router]);
 
   useEffect(() => {
     const searchMessages = async () => {
@@ -174,6 +121,44 @@ export default function MainLayout({
     const timeoutId = setTimeout(searchMessages, 300)
     return () => clearTimeout(timeoutId)
   }, [searchQuery, params.workspaceId])
+
+  // Subscribe to channel events
+  useEffect(() => {
+    if (!params.workspaceId) return;
+
+    const channel = pusherClient.subscribe(`workspace-${params.workspaceId}`);
+
+    // Handle new channel creation
+    const handleChannelCreate = (newChannel: ChannelEvent) => {
+      mutate((current = []) => {
+        const exists = current.some(ch => ch.id === newChannel.id);
+        if (exists) return current;
+        return [...current, { id: newChannel.id, name: newChannel.name }];
+      }, false);
+    };
+
+    // Handle channel deletion
+    const handleChannelDelete = (deletedChannel: ChannelEvent) => {
+      mutate((current = []) => current.filter(ch => ch.id !== deletedChannel.id), false);
+      
+      // If we're on the deleted channel's page, redirect to the first available channel
+      if (pathname === `/${params.workspaceId}/${deletedChannel.id}`) {
+        const remainingChannels = channels.filter(ch => ch.id !== deletedChannel.id)
+        if (remainingChannels.length > 0) {
+          router.push(`/${params.workspaceId}/${remainingChannels[0].id}`);
+        }
+      }
+    };
+
+    channel.bind(EVENTS.CHANNEL_CREATE, handleChannelCreate);
+    channel.bind(EVENTS.CHANNEL_DELETE, handleChannelDelete);
+
+    return () => {
+      channel.unbind(EVENTS.CHANNEL_CREATE, handleChannelCreate);
+      channel.unbind(EVENTS.CHANNEL_DELETE, handleChannelDelete);
+      pusherClient.unsubscribe(`workspace-${params.workspaceId}`);
+    };
+  }, [params.workspaceId, pathname, router, channels, mutate]);
 
   return (
     <WorkspaceMembersProvider workspaceId={params.workspaceId}>

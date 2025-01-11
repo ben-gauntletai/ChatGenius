@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs';
 import { prisma } from '@/lib/prisma';
-import { pusherServer } from '@/lib/pusher';
-import { EVENTS } from '@/lib/pusher-events';
+import { revalidatePath } from 'next/cache';
 
 export async function DELETE(
   req: Request,
@@ -22,20 +21,13 @@ export async function DELETE(
       }
     });
 
-    // Trigger Pusher event for channel deletion
-    await pusherServer.trigger(
-      `workspace-${params.workspaceId}`,
-      EVENTS.CHANNEL_DELETE,
-      {
-        id: channel.id,
-        name: channel.name,
-        workspaceId: channel.workspaceId
-      }
-    );
+    // Revalidate the workspace page and channel list
+    revalidatePath(`/${params.workspaceId}`);
+    revalidatePath(`/api/workspaces/${params.workspaceId}/channels`);
 
     return NextResponse.json(channel);
   } catch (error) {
-    console.error('[CHANNELS_DELETE]', error);
+    console.error('[CHANNEL_DELETE]', error);
     return new NextResponse('Internal Error', { status: 500 });
   }
 } 
