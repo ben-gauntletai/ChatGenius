@@ -6,6 +6,7 @@ import Message from './message'
 import { useAuth } from '@clerk/nextjs'
 import { pusherClient } from '@/lib/pusher'
 import { Message as MessageType } from '@/types'
+import { useWorkspaceMembers } from '@/contexts/workspace-members-context'
 
 interface ThreadProps {
   isOpen: boolean;
@@ -25,19 +26,21 @@ export default function Thread({
   onReplyCountChange
 }: ThreadProps) {
   const { userId } = useAuth()
+  const { members } = useWorkspaceMembers()
   const [replies, setReplies] = useState<MessageType[]>([])
   const [newReply, setNewReply] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [localParentMessage, setLocalParentMessage] = useState(parentMessage)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const [hasLoadedReplies, setHasLoadedReplies] = useState(false)
+  const hasInitializedRef = useRef(false)
 
   useEffect(() => {
     setLocalParentMessage(parentMessage)
   }, [parentMessage.id])
 
+  // Fetch initial replies
   useEffect(() => {
-    if (!parentMessage?.id || hasLoadedReplies) return
+    if (!parentMessage?.id || hasInitializedRef.current) return;
 
     const fetchReplies = async () => {
       try {
@@ -45,31 +48,140 @@ export default function Thread({
         const response = await fetch(endpoint)
         const data = await response.json()
         setReplies(data)
-        setHasLoadedReplies(true)
-        onReplyCountChange?.(parentMessage.id, data.length)
+        hasInitializedRef.current = true;
       } catch (error) {
         console.error('Error fetching replies:', error)
       }
     }
 
     fetchReplies()
+  }, [parentMessage.id]);
 
-    const channel = pusherClient.subscribe(`thread-${parentMessage.id}`)
+  // Handle reply count updates
+  useEffect(() => {
+    if (replies.length > 0) {
+      onReplyCountChange?.(parentMessage.id, replies.length);
+    }
+  }, [replies.length, parentMessage.id, onReplyCountChange]);
+
+  // Subscribe to channel events
+  useEffect(() => {
+    if (!channelId) return;
+
+    const channel = pusherClient.subscribe(`channel-${channelId}`);
     
-    channel.bind('new-reply', (reply: any) => {
-      setReplies((current) => {
-        if (current.some(r => r.id === reply.id)) return current
-        const newReplies = [...current, reply]
-        onReplyCountChange?.(parentMessage.id, newReplies.length)
-        return newReplies
-      })
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    })
+    // Handle new messages
+    const handleMessage = (message: MessageType) => {
+      console.log('Thread received message:', {
+        message,
+        isThreadReply: message.isThreadReply,
+        parentMessageId: message.parentMessageId,
+        thisThreadId: parentMessage.id
+      });
+
+      // If it's a thread reply for this thread
+      if (message.isThreadReply && message.parentMessageId === parentMessage.id) {
+        setReplies((current) => {
+          if (current.some(r => r.id === message.id)) return current;
+          return [...current, message].sort((a, b) => 
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+
+        requestAnimationFrame(() => {
+          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        });
+      }
+    };
+
+    // Handle message updates (including reactions)
+    const handleMessageUpdate = (message: MessageType) => {
+      console.log('Thread received update:', {
+        message,
+        parentMessageId: parentMessage.id,
+        currentReplies: replies
+      });
+
+      // If it's the parent message
+      if (message.id === parentMessage.id) {
+        console.log('Updating parent message with:', message);
+        setLocalParentMessage(current => {
+          const updated = {
+            ...current,
+            content: message.content !== undefined ? message.content : current.content,
+            reactions: message.reactions !== undefined ? message.reactions : current.reactions,
+            replyCount: message.replyCount !== undefined ? message.replyCount : current.replyCount,
+            thread: message.thread || current.thread
+          };
+          console.log('Updated parent message:', updated);
+          return updated;
+        });
+
+        // If there's a new reply in the update
+        if (message.thread?.lastReply) {
+          setReplies(current => {
+            if (current.some(r => r.id === message.thread!.lastReply!.id)) return current;
+            return [...current, message.thread!.lastReply!].sort((a, b) => 
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          });
+
+          requestAnimationFrame(() => {
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+          });
+        }
+      } else {
+        // Update thread replies (including reactions)
+        setReplies(current => {
+          const updated = current.map(reply => {
+            if (reply.id === message.id) {
+              console.log('Updating reply:', reply.id, 'with:', message);
+              return {
+                ...reply,
+                content: message.content !== undefined ? message.content : reply.content,
+                reactions: message.reactions !== undefined ? message.reactions : reply.reactions
+              };
+            }
+            return reply;
+          });
+          console.log('Updated replies:', updated);
+          return updated;
+        });
+      }
+    };
+
+    // Handle message deletions
+    const handleMessageDelete = (messageId: string) => {
+      console.log('Thread received delete:', messageId);
+
+      // If parent message is deleted, close the thread
+      if (messageId === parentMessage.id) {
+        onClose();
+        return;
+      }
+
+      // Remove the message from replies
+      setReplies(current => {
+        const newReplies = current.filter(reply => reply.id !== messageId);
+        // Update reply count after deletion
+        if (newReplies.length !== current.length) {
+          onReplyCountChange?.(parentMessage.id, newReplies.length);
+        }
+        return newReplies;
+      });
+    };
+
+    channel.bind('new-message', handleMessage);
+    channel.bind('message-update', handleMessageUpdate);
+    channel.bind('message-delete', handleMessageDelete);
 
     return () => {
-      pusherClient.unsubscribe(`thread-${parentMessage.id}`)
-    }
-  }, [parentMessage.id, hasLoadedReplies])
+      channel.unbind('new-message', handleMessage);
+      channel.unbind('message-update', handleMessageUpdate);
+      channel.unbind('message-delete', handleMessageDelete);
+      pusherClient.unsubscribe(`channel-${channelId}`);
+    };
+  }, [channelId, parentMessage.id, onClose, onReplyCountChange]);
 
   // Listen for profile updates
   useEffect(() => {

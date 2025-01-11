@@ -88,21 +88,62 @@ export async function POST(
         threadId: thread.id
       },
       include: {
-        reactions: true
+        reactions: true,
+        thread: true
       }
     });
 
-    // Format the response
+    // Format the thread message
     const formattedMessage = {
       ...threadMessage,
-      isThreadReply: true
+      isThreadReply: true,
+      parentMessageId: params.messageId,
+      thread: {
+        id: thread.id,
+        messageId: params.messageId
+      }
     };
 
-    // Broadcast the new thread message
+    // Get the updated reply count
+    const replyCount = await prisma.message.count({
+      where: { threadId: thread.id }
+    });
+
+    // Update the parent message in the database to include thread info
+    const updatedParentMessage = await prisma.message.update({
+      where: { id: params.messageId },
+      data: {
+        replyCount
+      },
+      include: {
+        reactions: true,
+        thread: true
+      }
+    });
+
+    // Format the parent message update
+    const formattedParentUpdate = {
+      ...updatedParentMessage,
+      replyCount,
+      thread: {
+        id: thread.id,
+        messageId: params.messageId,
+        lastReply: formattedMessage
+      }
+    };
+
+    // First send the thread message
     await pusherServer.trigger(
-      `thread-${thread.id}`,
-      'new-thread-message',
+      `channel-${message.channelId}`,
+      'new-message',
       formattedMessage
+    );
+
+    // Then send the parent message update
+    await pusherServer.trigger(
+      `channel-${message.channelId}`,
+      'message-update',
+      formattedParentUpdate
     );
 
     return NextResponse.json(formattedMessage);

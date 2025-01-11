@@ -12,10 +12,19 @@ export interface Message {
   userName: string;
   userImage: string | null;
   channelId?: string;
+  workspaceId?: string;
   reactions: Reaction[];
-  fileUrl?: string | null | undefined;
-  fileName?: string | null | undefined;
-  fileType?: string | null | undefined;
+  fileUrl?: string | null;
+  fileName?: string | null;
+  fileType?: string | null;
   replyCount?: number;
+  isThreadReply?: boolean;
+  threadId?: string;
+  parentMessageId?: string;
+  thread?: {
+    id: string;
+    messageId: string;
+    lastReply?: Message;
+  };
   conversationId?: boolean;
 } 
