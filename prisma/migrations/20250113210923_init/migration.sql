@@ -61,6 +61,8 @@ CREATE TABLE "Message" (
     "channelId" TEXT NOT NULL,
     "workspaceId" TEXT NOT NULL,
     "threadId" TEXT,
+    "isThreadReply" BOOLEAN NOT NULL DEFAULT false,
+    "parentMessageId" TEXT,
     "replyCount" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -165,6 +167,9 @@ CREATE INDEX "Message_workspaceId_idx" ON "Message"("workspaceId");
 
 -- CreateIndex
 CREATE INDEX "Message_threadId_idx" ON "Message"("threadId");
+
+-- CreateIndex
+CREATE INDEX "Message_parentMessageId_idx" ON "Message"("parentMessageId");
 
 -- CreateIndex
 CREATE INDEX "DirectMessage_workspaceId_idx" ON "DirectMessage"("workspaceId");

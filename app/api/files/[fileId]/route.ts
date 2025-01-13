@@ -14,6 +14,12 @@ export async function GET(
       return new NextResponse('File not found', { status: 404 });
     }
 
+    // If the data is a URL (starts with http/https), redirect to it
+    if (file.data.startsWith('http')) {
+      return NextResponse.redirect(file.data);
+    }
+
+    // Otherwise, treat it as base64 data
     const buffer = Buffer.from(file.data, 'base64');
 
     return new NextResponse(buffer, {

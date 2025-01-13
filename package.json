@@ -29,7 +29,7 @@
     "react-dom": "^18",
     "shadcn-ui": "^0.9.4",
     "svix": "^1.45.1",
-    "uuid": "^11.0.4"
+    "uuid": "^11.0.5"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -44,6 +44,6 @@
     "typescript": "^5"
   },
   "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/long-seed.ts"
   }
 }
