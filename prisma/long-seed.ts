@@ -166,12 +166,12 @@ async function main() {
         content: "Hey everyone! As a personal trainer, I've seen incredible transformations through regular exercise. Anyone here want to share their fitness journey?"
       },
       {
-        userId: users[2].id,
-        content: "Ugh, not this again. I'm perfectly happy with my lifestyle. Why does everyone push exercise so much? *munches chips*"
-      },
-      {
         userId: users[1].id,
         content: "I try to stay active between classes, but it's hard to find the time. Though I do notice I have more energy when I exercise regularly."
+      },
+      {
+        userId: users[2].id,
+        content: "Ugh, not this again. I'm perfectly happy with my lifestyle. Why does everyone push exercise so much? *munches chips*"
       },
       {
         userId: users[3].id,
@@ -179,82 +179,115 @@ async function main() {
       }
     ]
 
-    // // Add more conversation messages
-    // for (let i = 0; i < 49; i++) {
-    //   // Henry (Personal Trainer) messages
-    //   conversationMessages.push({
-    //     userId: users[0].id,
-    //     content: [
-    //       "Studies show that regular exercise reduces the risk of chronic diseases by up to 50%!",
-    //       "Even 30 minutes of walking daily can make a huge difference.",
-    //       "*checking my client's progress* Just had someone lose 20 pounds in 2 months through consistent training!",
-    //       "The mental health benefits of exercise are just as important as the physical ones.",
-    //       "Remember, it's not about being perfect, it's about being consistent!"
-    //     ][Math.floor(Math.random() * 5)]
-    //   })
+    // Define messages for each user
+    const messages = {
+      henry: [
+        "Studies show that regular exercise reduces the risk of chronic diseases by up to 50%!",
+        "Even 30 minutes of walking daily can make a huge difference.",
+        "*checking my client's progress* Just had someone lose 20 pounds in 2 months through consistent training!",
+        "The mental health benefits of exercise are just as important as the physical ones.",
+        "Remember, it's not about being perfect, it's about being consistent!",
+        "*demonstrating proper form* Keep your core tight and back straight!",
+        "Just finished a great group session - the energy was incredible! 🔥",
+        "According to research, exercise can improve memory and cognitive function.",
+        "*sharing before/after photos* These results speak for themselves!",
+        "Proper nutrition and exercise go hand in hand for optimal health.",
+        "It's amazing how exercise can boost your immune system naturally.",
+        "*setting up equipment* Let's focus on functional movements today.",
+        "Exercise doesn't have to be intense to be effective - consistency is key!",
+        "Just helped a 65-year-old client deadlift their bodyweight! Age is just a number!",
+        "Remember to stay hydrated during your workouts! 💧"
+      ],
+      jessica: [
+        "*grading papers between sets* I've started doing quick workouts during my lunch break.",
+        "My students are definitely more attentive when we do active learning exercises.",
+        "I understand both sides - we need balance in life.",
+        "*stretching after sitting too long* My back feels so much better when I stay active.",
+        "Just got back from a walking meeting with another teacher - multitasking!",
+        "*organizing PE class* The kids love these new active learning games!",
+        "Started a morning yoga routine before class - makes such a difference.",
+        "Found some great desk exercises to share with other teachers.",
+        "*planning field day* Exercise can be fun when you make it a game!",
+        "Notice how my classroom management improved since adding movement breaks.",
+        "Taking the stairs instead of the elevator - small changes add up!",
+        "*doing jumping jacks* Quick energizer between lesson plans!",
+        "The school started a teacher wellness program - really helping with stress.",
+        "Incorporating movement into math lessons - the kids are loving it!",
+        "Started a teacher walking club during lunch - great for body and mind!"
+      ],
+      larry: [
+        "*watching TV* But my favorite shows are on during gym time!",
+        "Exercise is too expensive. Netflix is cheaper than a gym membership!",
+        "*yawning* Maybe I'll start next week... or next month...",
+        "Fine, I did take the stairs today instead of the elevator... happy now?",
+        "*ordering takeout* But healthy food doesn't taste as good!",
+        "*scrolling through phone* These workout influencers make it look too easy.",
+        "My couch has memory foam - that's basically exercise for it, right?",
+        "*adjusting TV remote* The walk to the kitchen counts as cardio!",
+        "Why exercise when there's a new season of my favorite show?",
+        "My gaming sessions work out my thumb muscles! 🎮",
+        "*checking delivery app* The delivery guy gets enough exercise for both of us.",
+        "I did a push-up last year. Still recovering from that.",
+        "My relationship with my couch is the only commitment I need.",
+        "*finding TV remote* This counts as a treasure hunt workout!",
+        "Exercise? In this economy? *orders another pizza*"
+      ],
+      aaron: [
+        "NO EXCUSES! If I can train 6 hours a day, you can do 30 minutes!",
+        "*chalk dust everywhere* Just finished my third session of the day!",
+        "The Olympic village is calling my name! Paris 2024! 🏋️‍♂️",
+        "You think that's heavy? Try snatching 140kg!",
+        "*meal prepping* Protein is life! What's your macro split?",
+        "*checking stopwatch* New personal record on clean and jerk! 💪",
+        "Sleep, eat, lift, repeat - that's the champion's lifestyle!",
+        "Just ordered my third pair of weightlifting shoes this month!",
+        "*applying knee wraps* Time for some REAL training!",
+        "If you're not failing lifts, you're not pushing hard enough!",
+        "My rest days are basically active recovery with light 100kg squats.",
+        "*mixing pre-workout* Let's make these weights fear us today!",
+        "Just watched competition footage - my technique needs more power!",
+        "Who needs a social life when you have barbells? 🏋️‍♂️",
+        "*checking competition schedule* Every training day counts!"
+      ]
+    }
 
-    //   // Jessica (Teacher) messages
-    //   conversationMessages.push({
-    //     userId: users[1].id,
-    //     content: [
-    //       "*grading papers between sets* I've started doing quick workouts during my lunch break.",
-    //       "My students are definitely more attentive when we do active learning exercises.",
-    //       "I understand both sides - we need balance in life.",
-    //       "*stretching after sitting too long* My back feels so much better when I stay active.",
-    //       "Just got back from a walking meeting with another teacher - multitasking!"
-    //     ][Math.floor(Math.random() * 5)]
-    //   })
+    // Create message indices to track which message to use next for each user
+    let messageIndices = {
+      henry: 0,
+      jessica: 0,
+      larry: 0,
+      aaron: 0
+    }
 
-    //   // Larry (Couch Potato) messages
-    //   conversationMessages.push({
-    //     userId: users[2].id,
-    //     content: [
-    //       "*watching TV* But my favorite shows are on during gym time!",
-    //       "Exercise is too expensive. Netflix is cheaper than a gym membership!",
-    //       "*yawning* Maybe I'll start next week... or next month...",
-    //       "Fine, I did take the stairs today instead of the elevator... happy now?",
-    //       "*ordering takeout* But healthy food doesn't taste as good!"
-    //     ][Math.floor(Math.random() * 5)]
-    //   })
-
-    //   // Aaron (Olympic Lifter) messages
-    //   conversationMessages.push({
-    //     userId: users[3].id,
-    //     content: [
-    //       "NO EXCUSES! If I can train 6 hours a day, you can do 30 minutes!",
-    //       "*chalk dust everywhere* Just finished my third session of the day!",
-    //       "The Olympic village is calling my name! Paris 2024! 🏋️‍♂️",
-    //       "You think that's heavy? Try snatching 140kg!",
-    //       "*meal prepping* Protein is life! What's your macro split?"
-    //     ][Math.floor(Math.random() * 5)]
-    //   })
-    // }
-
-    // // Shuffle messages to make conversation more natural
-    // conversationMessages.sort(() => Math.random() - 0.5)
-
-    // // Prevent consecutive messages from the same user
-    // for (let i = 1; i < conversationMessages.length; i++) {
-    //   if (conversationMessages[i].userId === conversationMessages[i - 1].userId) {
-    //     for (let j = i + 1; j < conversationMessages.length; j++) {
-    //       if (conversationMessages[j].userId !== conversationMessages[i - 1].userId) {
-    //         const temp = conversationMessages[i];
-    //         conversationMessages[i] = conversationMessages[j];
-    //         conversationMessages[j] = temp;
-    //         break;
-    //       }
-    //     }
-    //   }
-    // }
+    // Add messages in a consistent order, using each message exactly once
+    for (let i = 0; i < 15; i++) {
+      // Each user speaks once in each round, using their next message
+      conversationMessages.push({
+        userId: users[0].id,
+        content: messages.henry[messageIndices.henry++]
+      })
+      conversationMessages.push({
+        userId: users[1].id,
+        content: messages.jessica[messageIndices.jessica++]
+      })
+      conversationMessages.push({
+        userId: users[2].id,
+        content: messages.larry[messageIndices.larry++]
+      })
+      conversationMessages.push({
+        userId: users[3].id,
+        content: messages.aaron[messageIndices.aaron++]
+      })
+    }
 
     // Create messages with progressive timestamps
     console.log('Creating messages...')
     
-    // Sort messages by timestamp to maintain chronological order
+    // Create timestamps that ensure messages appear in the exact order they were added
     const sortedMessages = conversationMessages.map((message, index) => ({
       ...message,
-      timestamp: getRandomTimestamp(startDate, endDate)
-    })).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      timestamp: new Date(startDate.getTime() + (index * (endDate.getTime() - startDate.getTime()) / conversationMessages.length))
+    }));
 
     // Create all messages with consistent profile pictures
     for (const message of sortedMessages) {
