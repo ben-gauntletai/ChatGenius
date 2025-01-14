@@ -116,11 +116,8 @@ export async function POST(req: Request) {
         try {
           console.log('[DIRECT_MESSAGES_POST] Auto-response is enabled for receiver');
           
-          // Get base URL from request headers
-          const protocol = req.headers.get('x-forwarded-proto') || 'http';
-          const host = req.headers.get('host') || 'localhost:3000';
-          const baseUrl = `${protocol}://${host}`;
-          
+          // Use NEXT_PUBLIC_APP_URL for the base URL
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
           console.log('[DIRECT_MESSAGES_POST] Making auto-response request to:', `${baseUrl}/api/generate-response`);
 
           // Generate auto-response
