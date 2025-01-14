@@ -36,21 +36,22 @@ model Workspace {
 }
 
 model WorkspaceMember {
-  id            String   @id @default(uuid())
-  userId        String
-  workspaceId   String
-  userName      String   @default("User")
-  userImage     String   @default("")
-  role          String   @default("MEMBER")
-  status        String   @default("OFFLINE")
-  lastActiveStatus String   @default("ONLINE")
-  hasCustomName Boolean  @default(false)
-  hasCustomImage Boolean @default(false)
-  isFirstLogin  Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String   @id @default(uuid())
+  userId          String
+  workspaceId     String
+  userName        String   @default("User")
+  userImage       String   @default("")
+  role            String   @default("MEMBER")
+  status          String   @default("OFFLINE")
+  lastActiveStatus String  @default("ONLINE")
+  hasCustomName   Boolean  @default(false)
+  hasCustomImage  Boolean  @default(false)
+  isFirstLogin    Boolean  @default(true)
+  autoResponseEnabled Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([userId])

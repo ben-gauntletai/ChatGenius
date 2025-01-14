@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/utils/pusher'
+import type { WorkspaceMember } from '@prisma/client'
+
+// Temporary type to help TypeScript recognize the autoResponseEnabled field
+type ExtendedWorkspaceMember = WorkspaceMember & {
+  autoResponseEnabled: boolean;
+};
 
 export async function POST(req: Request) {
   try {
@@ -57,6 +63,7 @@ export async function POST(req: Request) {
 
     console.log('[DIRECT_MESSAGES_POST] Creating message');
 
+    // Create message immediately
     const message = await prisma.directMessage.create({
       data: {
         content,
@@ -74,10 +81,9 @@ export async function POST(req: Request) {
       include: {
         reactions: true
       }
-    })
+    });
 
-    console.log('[DIRECT_MESSAGES_POST] Message created:', message);
-
+    // Format and send the original message immediately
     const formattedMessage = {
       id: message.id,
       content: message.content,
@@ -92,10 +98,101 @@ export async function POST(req: Request) {
       isEdited: false
     }
 
-    const channelName = `dm-${[userId, receiverId].sort().join('-')}`
-    await pusherServer.trigger(channelName, 'new-message', formattedMessage)
+    // Create channel name for Pusher
+    const channelName = `dm-${[userId, receiverId].sort().join('-')}`;
+    await pusherServer.trigger(channelName, 'new-message', formattedMessage);
 
-    return NextResponse.json(formattedMessage)
+    // Check if receiver has auto-response enabled and handle asynchronously
+    const receiverMember = (await prisma.workspaceMember.findFirst({
+      where: { 
+        userId: receiverId,
+        workspaceId 
+      }
+    })) as ExtendedWorkspaceMember | null;
+
+    if (receiverMember?.autoResponseEnabled) {
+      // Handle auto-response asynchronously
+      (async () => {
+        try {
+          console.log('[DIRECT_MESSAGES_POST] Auto-response is enabled for receiver');
+          
+          // Get base URL from request headers
+          const protocol = req.headers.get('x-forwarded-proto') || 'http';
+          const host = req.headers.get('host') || 'localhost:3000';
+          const baseUrl = `${protocol}://${host}`;
+          
+          console.log('[DIRECT_MESSAGES_POST] Making auto-response request to:', `${baseUrl}/api/generate-response`);
+
+          // Generate auto-response
+          const autoResponse = await fetch(`${baseUrl}/api/generate-response`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: content,
+              userId: receiverId,
+              workspaceId
+            })
+          });
+          
+          console.log('[DIRECT_MESSAGES_POST] Auto-response status:', autoResponse.status);
+          
+          if (!autoResponse.ok) {
+            const errorText = await autoResponse.text();
+            console.error('[DIRECT_MESSAGES_POST] Auto-response failed:', {
+              status: autoResponse.status,
+              statusText: autoResponse.statusText,
+              error: errorText
+            });
+            return;
+          }
+
+          const { response } = await autoResponse.json();
+          console.log('[DIRECT_MESSAGES_POST] Got auto-response:', response);
+          
+          // Create auto-response message
+          const autoResponseMessage = await prisma.directMessage.create({
+            data: {
+              content: response,
+              workspaceId,
+              senderId: receiverId,
+              senderName: receiver.userName || 'User',
+              senderImage: receiver.userImage?.startsWith('/api/files/') ? receiver.userImage : null,
+              receiverId: userId,
+              receiverName: sender.userName || 'User',
+              receiverImage: sender.userImage?.startsWith('/api/files/') ? sender.userImage : null,
+            },
+            include: {
+              reactions: true
+            }
+          });
+
+          // Format and broadcast auto-response
+          const formattedAutoResponse = {
+            id: autoResponseMessage.id,
+            content: autoResponseMessage.content,
+            createdAt: autoResponseMessage.createdAt,
+            userId: autoResponseMessage.senderId,
+            userName: autoResponseMessage.senderName,
+            userImage: autoResponseMessage.senderImage,
+            reactions: autoResponseMessage.reactions,
+            fileUrl: null,
+            fileName: null,
+            fileType: null,
+            isEdited: false
+          };
+
+          // Use the same channel name convention
+          const autoResponseChannelName = `dm-${[receiverId, userId].sort().join('-')}`;
+          await pusherServer.trigger(autoResponseChannelName, 'new-message', formattedAutoResponse);
+        } catch (error) {
+          console.error('[DIRECT_MESSAGES_POST] Auto-response error:', error);
+        }
+      })().catch(error => {
+        console.error('[DIRECT_MESSAGES_POST] Async auto-response error:', error);
+      });
+    }
+
+    return NextResponse.json(formattedMessage);
   } catch (error) {
     console.error('[DIRECT_MESSAGES_POST] Detailed error:', error)
     // Return the actual error message in development

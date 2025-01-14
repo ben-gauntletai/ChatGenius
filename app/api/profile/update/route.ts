@@ -3,6 +3,12 @@ import { auth } from '@clerk/nextjs';
 import { prisma } from '@/lib/prisma';
 import { pusherServer } from '@/lib/pusher';
 import { EVENTS } from '@/lib/pusher-events';
+import type { WorkspaceMember } from '@prisma/client';
+
+// Temporary type to help TypeScript recognize the autoResponseEnabled field
+type ExtendedWorkspaceMember = WorkspaceMember & {
+  autoResponseEnabled: boolean;
+};
 
 export async function PATCH(req: Request) {
   try {
@@ -11,15 +17,21 @@ export async function PATCH(req: Request) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    const { userName, status, userImage } = await req.json();
+    const { userName, status, userImage, autoResponseEnabled } = await req.json();
+    console.log('Received update request:', { userName, status, userImage, autoResponseEnabled });
 
     // Find all workspace memberships for the user
-    const members = await prisma.workspaceMember.findMany({
+    const members = (await prisma.workspaceMember.findMany({
       where: { userId }
-    });
+    })) as ExtendedWorkspaceMember[];
+    
+    console.log('Current member state:', members.map(m => ({ 
+      id: m.id, 
+      autoResponseEnabled: m.autoResponseEnabled 
+    })));
 
     // Update all memberships
-    const updatePromises = members.map(async (member) => {
+    const updatePromises = members.map(async (member: ExtendedWorkspaceMember) => {
       // Only update the fields that are provided
       const updateData: any = {
         isFirstLogin: false // Always set isFirstLogin to false on profile update
@@ -39,9 +51,19 @@ export async function PATCH(req: Request) {
         updateData.hasCustomImage = !!userImage;
       }
 
-      const updatedMember = await prisma.workspaceMember.update({
+      if (autoResponseEnabled !== undefined) {
+        updateData.autoResponseEnabled = autoResponseEnabled;
+        console.log('Updating autoResponseEnabled for member', member.id, 'to:', autoResponseEnabled);
+      }
+
+      const updatedMember = (await prisma.workspaceMember.update({
         where: { id: member.id },
         data: updateData
+      })) as ExtendedWorkspaceMember;
+
+      console.log('Member updated:', { 
+        id: updatedMember.id, 
+        autoResponseEnabled: updatedMember.autoResponseEnabled 
       });
 
       // Broadcast update to workspace members
@@ -49,8 +71,15 @@ export async function PATCH(req: Request) {
         `workspace-${member.workspaceId}`,
         EVENTS.MEMBER_UPDATE,
         {
-          ...updatedMember,
-          workspaceId: member.workspaceId
+          id: updatedMember.id,
+          userId: updatedMember.userId,
+          userName: updatedMember.userName,
+          userImage: updatedMember.userImage,
+          status: updatedMember.status,
+          hasCustomName: updatedMember.hasCustomName,
+          hasCustomImage: updatedMember.hasCustomImage,
+          workspaceId: updatedMember.workspaceId,
+          autoResponseEnabled: updatedMember.autoResponseEnabled
         }
       );
 
@@ -58,9 +87,14 @@ export async function PATCH(req: Request) {
     });
 
     const updatedMembers = await Promise.all(updatePromises);
+    console.log('All members updated:', updatedMembers.map(m => ({ 
+      id: m.id, 
+      autoResponseEnabled: m.autoResponseEnabled 
+    })));
+
     return NextResponse.json(updatedMembers[0]);
   } catch (error) {
-    console.error('PROFILE_UPDATE_ERROR:', error);
+    console.error('Error updating profile:', error);
     return new NextResponse('Internal Error', { status: 500 });
   }
 } 

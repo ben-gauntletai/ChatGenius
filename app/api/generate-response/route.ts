@@ -14,12 +14,15 @@ const createPrompt = (template: string, variables: PromptVariables): string => {
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
+    const { prompt, channelId, workspaceId, userId: requestUserId } = await req.json();
+    
+    // Get userId either from auth or request body
+    const { userId: authUserId } = auth();
+    const userId = authUserId || requestUserId;
+    
     if (!userId) {
-      return new NextResponse('Unauthorized', { status: 401 });
+      return new NextResponse('Unauthorized - No userId provided', { status: 401 });
     }
-
-    const { prompt, channelId, workspaceId } = await req.json();
     
     // Get context and formatted prompt
     const { prompt: userPrompt, context } = await getContextAndGenerateResponse(
@@ -53,11 +56,15 @@ export async function POST(req: Request) {
     console.log('Context:', context)
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant that matches the user's writing style. You should follow the style of these {context}"
+          content: `You are generating an automated response on behalf of a user. The following messages show their writing style:
+
+          ${context}
+
+          You must match their exact writing style, including tone, formality, and any patterns in how they communicate. Your response should feel indistinguishable from their natural way of writing.`
         },
         {
           role: "user",

@@ -147,12 +147,12 @@ export const getSimilarMessages = async (content: string, userId: string, channe
 };
 
 export const getContextAndGenerateResponse = async (prompt: string, userId: string, channelId?: string, workspaceId?: string) => {
-  // 1. Set up filters for vector search
-  const filters: Record<string, any> = { userId };
+  // 1. Set up filters for vector search - filter by userId to get their style
+  const filters: Record<string, any> = { userId };  // Always include userId filter
   if (channelId) filters.channelId = channelId;
   if (workspaceId) filters.workspaceId = workspaceId;
 
-  // 2. Query vector store for relevant messages
+  // 2. Query vector store for relevant messages from this user
   const matches = await queryMessageVectors(prompt, filters);
   
   // 3. Format context from matches
@@ -160,6 +160,8 @@ export const getContextAndGenerateResponse = async (prompt: string, userId: stri
     .filter(m => m.metadata && typeof m.metadata === 'object' && 'content' in m.metadata)
     .map(m => (m.metadata as { content: string }).content)
     .join('\n');
+
+  console.log('[VECTOR_STORE] Found messages from user:', context);
 
   return {
     prompt,

@@ -15,6 +15,7 @@ export interface MemberUpdateEvent {
   hasCustomName: boolean;
   hasCustomImage: boolean;
   workspaceId: string;
+  autoResponseEnabled: boolean;
 }
 
 export interface ErrorEvent {

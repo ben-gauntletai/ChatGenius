@@ -1,40 +1,95 @@
 'use client';
 
 import { X, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import DefaultAvatar from '@/components/ui/default-avatar';
 import { useWorkspaceMembers } from '@/contexts/workspace-members-context';
 
-interface ProfileModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  currentImage?: string;
-  hasCustomImage?: boolean;
-  isFirstLogin?: boolean;
+interface Profile {
+  name: string;
+  image: string | null;
+  autoResponseEnabled: boolean;
 }
 
 export default function ProfileModal({
   isOpen,
   onClose,
-  currentImage,
-  hasCustomImage,
-  isFirstLogin
-}: ProfileModalProps) {
+  initialProfile = {
+    name: '',
+    image: null,
+    autoResponseEnabled: false
+  },
+  onUpdate
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  initialProfile?: Profile;
+  onUpdate?: (profile: Profile) => void;
+}) {
   const { updateMember, currentMember } = useWorkspaceMembers();
-  const [userName, setUserName] = useState(currentMember?.userName || '');
+  // Initialize state from currentMember if available, otherwise use initialProfile
+  const [profile, setProfile] = useState<Profile>(() => {
+    if (currentMember) {
+      return {
+        name: currentMember.userName,
+        image: currentMember.userImage,
+        autoResponseEnabled: Boolean(currentMember.autoResponseEnabled)
+      };
+    }
+    return {
+      name: initialProfile.name || '',
+      image: initialProfile.image || null,
+      autoResponseEnabled: Boolean(initialProfile.autoResponseEnabled)
+    };
+  });
+  const [userName, setUserName] = useState(currentMember?.userName || initialProfile.name || '');
   const [status, setStatus] = useState(currentMember?.status || 'ONLINE');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
+
+  // Only log the current state when the modal opens
+  useEffect(() => {
+    if (isOpen && currentMember) {
+      console.log('Modal opened with state:', {
+        userName: currentMember.userName,
+        autoResponseEnabled: currentMember.autoResponseEnabled,
+        localAutoResponseEnabled: profile.autoResponseEnabled
+      });
+    }
+  }, [isOpen, currentMember]);
 
   const handleSave = async () => {
     try {
       setIsLoading(true);
       
-      await updateMember(currentMember!.id, {
+      if (!currentMember) return;
+
+      console.log('Saving profile with state:', {
         userName: userName.trim() || 'User',
         status,
-        userImage: uploadedImage || undefined
+        autoResponseEnabled: profile.autoResponseEnabled
       });
+
+      // Save all changes
+      await updateMember(currentMember.id, {
+        userName: userName.trim() || 'User',
+        status,
+        userImage: uploadedImage || currentMember.userImage,
+        hasCustomImage: !!uploadedImage || currentMember.hasCustomImage,
+        autoResponseEnabled: profile.autoResponseEnabled
+      });
+
+      console.log('Profile saved successfully');
+
+      // Only call onUpdate if it exists
+      if (onUpdate) {
+        onUpdate({
+          name: userName.trim() || 'User',
+          image: uploadedImage || currentMember.userImage,
+          autoResponseEnabled: profile.autoResponseEnabled
+        });
+      }
 
       onClose();
     } catch (error) {
@@ -47,13 +102,6 @@ export default function ProfileModal({
   const handleCancel = async () => {
     try {
       setIsLoading(true);
-      
-      if (isFirstLogin) {
-        await updateMember(currentMember!.id, {
-          userName: 'User'
-        });
-      }
-      
       onClose();
     } catch (error) {
       console.error('Error during cancel:', error);
@@ -64,8 +112,8 @@ export default function ProfileModal({
 
   if (!isOpen || !currentMember) return null;
 
-  // Use uploaded image if available, otherwise use current image
-  const displayImage = uploadedImage || (hasCustomImage ? currentImage : null);
+  // Use uploaded image if available, otherwise use current member's image if they have a custom one
+  const displayImage = uploadedImage || (currentMember.hasCustomImage ? currentMember.userImage : null);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -199,6 +247,34 @@ export default function ProfileModal({
               <option value="BUSY">Busy</option>
               <option value="OFFLINE">Offline</option>
             </select>
+          </div>
+
+          <div className="flex items-center justify-between mb-6">
+            <label className="text-sm font-medium text-gray-700">Auto-respond to DMs</label>
+            <button
+              type="button"
+              onClick={() => {
+                const newValue = !profile.autoResponseEnabled;
+                console.log('Updating local auto-response state:', {
+                  previousValue: profile.autoResponseEnabled,
+                  newValue: newValue
+                });
+                setProfile(prev => ({ 
+                  ...prev, 
+                  autoResponseEnabled: newValue
+                }));
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#3F0E40] ${
+                profile.autoResponseEnabled ? 'bg-[#3F0E40] shadow-lg' : 'bg-gray-300 hover:bg-gray-400'
+              }`}
+              disabled={isLoading}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform ${
+                  profile.autoResponseEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
           </div>
         </div>
 

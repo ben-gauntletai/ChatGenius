@@ -15,6 +15,7 @@ interface Member {
   hasCustomName: boolean;
   hasCustomImage: boolean;
   workspaceId: string;
+  autoResponseEnabled: boolean;
 }
 
 interface WorkspaceMembersContextType {
@@ -41,6 +42,7 @@ export function WorkspaceMembersProvider({
   const [currentMember, setCurrentMember] = useState<Member | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const refetchMembers = async () => {
     try {
@@ -49,11 +51,20 @@ export function WorkspaceMembersProvider({
       if (!response.ok) throw new Error('Failed to fetch members');
       
       const data = await response.json();
-      setMembers(data);
+      console.log('Fetched members data:', data.map((m: Member) => ({
+        id: m.id,
+        userName: m.userName,
+        autoResponseEnabled: m.autoResponseEnabled
+      })));
       
-      if (userId) {
-        const member = data.find((m: Member) => m.userId === userId);
-        setCurrentMember(member || null);
+      // Only update state if we're not in the middle of a save operation
+      if (!isSaving) {
+        setMembers(data);
+        
+        if (userId) {
+          const member = data.find((m: Member) => m.userId === userId);
+          setCurrentMember(member || null);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch members:', error);
@@ -65,19 +76,29 @@ export function WorkspaceMembersProvider({
 
   const updateMember = async (memberId: string, updates: Partial<Member>) => {
     try {
+      setIsSaving(true);
+      console.log('Starting member update:', { memberId, updates });
+      
       // Optimistic update
-      setMembers(current => 
-        current.map(member =>
+      setMembers(current => {
+        const newMembers = current.map(member =>
           member.id === memberId
             ? { ...member, ...updates }
             : member
-        )
-      );
+        );
+        console.log('Updated members state:', newMembers.map(m => ({
+          id: m.id,
+          autoResponseEnabled: m.autoResponseEnabled
+        })));
+        return newMembers;
+      });
 
       if (currentMember?.id === memberId) {
-        setCurrentMember(current => 
-          current ? { ...current, ...updates } : null
-        );
+        setCurrentMember(current => {
+          const newMember = current ? { ...current, ...updates } : null;
+          console.log('Updated current member:', newMember);
+          return newMember;
+        });
       }
 
       // API call
@@ -90,10 +111,30 @@ export function WorkspaceMembersProvider({
       if (!response.ok) {
         throw new Error('Failed to update member');
       }
+
+      const updatedMember = await response.json();
+      console.log('Server response:', updatedMember);
+
+      // Update state with server response
+      setMembers(current =>
+        current.map(member =>
+          member.id === memberId
+            ? { ...member, ...updatedMember }
+            : member
+        )
+      );
+
+      if (currentMember?.id === memberId) {
+        setCurrentMember(current =>
+          current ? { ...current, ...updatedMember } : null
+        );
+      }
     } catch (error) {
-      // On failure, refetch to ensure consistency
+      console.error('Update member error:', error);
       await refetchMembers();
       setError(error instanceof Error ? error : new Error('Failed to update member'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -113,25 +154,37 @@ export function WorkspaceMembersProvider({
     const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
     
     channel.bind(EVENTS.MEMBER_UPDATE, (data: MemberUpdateEvent) => {
-      setMembers(current =>
-        current.map(member =>
+      console.log('Received Pusher member update:', data);
+      
+      setMembers(current => {
+        const newMembers = current.map(member =>
           member.id === data.id
             ? { ...member, ...data }
             : member
-        )
-      );
-
-      if (currentMember?.id === data.id) {
-        setCurrentMember(current =>
-          current ? { ...current, ...data } : null
         );
-      }
+        console.log('Updated members from Pusher:', newMembers.map(m => ({
+          id: m.id,
+          autoResponseEnabled: m.autoResponseEnabled
+        })));
+        return newMembers;
+      });
+
+      // Use callback ref to get latest currentMember value
+      setCurrentMember(current => {
+        if (current?.id === data.id) {
+          const newMember = { ...current, ...data };
+          console.log('Updated current member from Pusher:', newMember);
+          return newMember;
+        }
+        return current;
+      });
     });
 
     return () => {
+      console.log('Unsubscribing from Pusher channel:', `workspace-${workspaceId}`);
       pusherClient.unsubscribe(`workspace-${workspaceId}`);
     };
-  }, [workspaceId, currentMember]);
+  }, [workspaceId]); // Remove currentMember from dependencies
 
   return (
     <WorkspaceMembersContext.Provider
