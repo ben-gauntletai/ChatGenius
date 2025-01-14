@@ -116,12 +116,12 @@ export async function POST(req: Request) {
         try {
           console.log('[DIRECT_MESSAGES_POST] Auto-response is enabled for receiver');
           
-          // Use NEXT_PUBLIC_APP_URL for the base URL
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-          console.log('[DIRECT_MESSAGES_POST] Making auto-response request to:', `${baseUrl}/api/generate-response`);
+          // Construct URL using the request URL as base
+          const url = new URL('/api/generate-response', req.url);
+          console.log('[DIRECT_MESSAGES_POST] Making auto-response request to:', url.toString());
 
           // Generate auto-response
-          const autoResponse = await fetch(`${baseUrl}/api/generate-response`, {
+          const autoResponse = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
