@@ -41,9 +41,11 @@ export default function WorkspaceLayout({
         <ProfileModal 
           isOpen={true}
           onClose={() => loadData()}
-          currentImage={member.userImage}
-          hasCustomImage={member.hasCustomImage}
-          isFirstLogin={true}
+          initialProfile={{
+            name: member.userName || '',
+            image: member.userImage || null,
+            autoResponseEnabled: member.autoResponseEnabled || false
+          }}
         />
       )}
       <WorkspaceMembersProvider workspaceId={params.workspaceId}>

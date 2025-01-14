@@ -86,12 +86,14 @@ export default function UserProfile({ workspaceId, onSignOut }: UserProfileProps
       </div>
 
       {isProfileModalOpen && (
-        <ProfileModal
+        <ProfileModal 
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
-          currentImage={currentMember.userImage || undefined}
-          hasCustomImage={currentMember.hasCustomImage}
-          isFirstLogin={false}
+          initialProfile={{
+            name: currentMember.userName || '',
+            image: currentMember.userImage || null,
+            autoResponseEnabled: currentMember.autoResponseEnabled || false
+          }}
         />
       )}
     </>
