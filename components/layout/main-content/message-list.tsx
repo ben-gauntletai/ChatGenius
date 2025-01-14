@@ -1,15 +1,27 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
-import { pusherClient } from '@/lib/pusher'
 import Message from './message'
 import Thread from './thread'
-import { PaperclipIcon, X } from 'lucide-react'
+import { PaperclipIcon, X, Wand2 } from 'lucide-react'
 import { Message as MessageType, Reaction } from '@/types'
 import { useWorkspaceMembers } from '@/contexts/workspace-members-context'
 import { useMessages } from '@/contexts/message-context'
 import { usePusher } from '@/contexts/pusher-context'
+import { getSimilarMessages } from '@/lib/vector-store'
+import { pusherClient } from '@/lib/pusher'
+
+declare global {
+  interface Window {
+    __clerk_db_jwt?: string;
+    Clerk?: {
+      session?: {
+        getToken: () => Promise<string>;
+      };
+    };
+  }
+}
 
 interface Profile {
   name: string;
@@ -225,12 +237,23 @@ export default function MessageList({
     if (!newMessage.trim() && !selectedFile) return
 
     try {
+      // Get the Clerk session token
+      const token = await window.Clerk?.session?.getToken();
+      
+      if (!token) {
+        console.error('No auth token available');
+        throw new Error('Authentication required');
+      }
+
       let uploadResult;
       if (selectedFile) {
         const formData = new FormData();
         formData.append('file', selectedFile);
         const uploadResponse = await fetch('/api/upload', {
           method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
           body: formData
         });
         if (!uploadResponse.ok) throw new Error('Failed to upload file');
@@ -246,13 +269,25 @@ export default function MessageList({
         fileType: selectedFile?.type
       }
 
+      console.log('Sending message with data:', messageData);
+
       const response = await fetch(isDM ? '/api/direct-messages' : '/api/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
         body: JSON.stringify(messageData)
       })
 
-      if (!response.ok) throw new Error('Failed to send message')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('Error response:', errorData);
+        throw new Error(errorData?.message || 'Failed to send message');
+      }
+
+      const responseData = await response.json();
+      console.log('Message sent successfully:', responseData);
 
       setNewMessage('')
       setSelectedFile(null)
@@ -465,38 +500,84 @@ export default function MessageList({
     };
   }, []);
 
+  const handleGenerate = async () => {
+    const messages = Object.values(allMessages);
+    if (messages.length === 0) return;
+    
+    try {
+      // Get the last message as the prompt
+      const lastMessage = messages[messages.length - 1];
+      console.log('Using last message as prompt:', lastMessage.content);
+      
+      // Generate response using the context
+      const response = await fetch('/api/generate-response', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: lastMessage.content,
+          channelId,
+          workspaceId
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to generate response');
+      const data = await response.json();
+      
+      // Send the AI-generated response
+      const messageData = {
+        content: data.response,
+        workspaceId,
+        ...(isDM ? { receiverId: otherUserId } : { channelId })
+      };
+
+      console.log('Sending message with data:', messageData);
+
+      const submitResponse = await fetch(isDM ? '/api/direct-messages' : '/api/messages', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          // Add Clerk session token if available
+          ...(window.__clerk_db_jwt && {
+            'Authorization': `Bearer ${window.__clerk_db_jwt}`
+          })
+        },
+        body: JSON.stringify(messageData)
+      });
+
+      if (!submitResponse.ok) {
+        const errorData = await submitResponse.json().catch(() => null);
+        console.error('Error response:', errorData);
+        throw new Error(errorData?.message || 'Failed to send generated response');
+      }
+      
+    } catch (error) {
+      console.error('Error in generate flow:', error);
+      setNewMessage('Failed to generate and send response. Please try again.');
+    }
+  };
+
   return (
     <div className="flex-1 flex h-full">
       <div className="flex-1 flex flex-col h-full relative">
         <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col min-h-full justify-end">
             <div className="flex-1" />
-      <div>
-        {messages.map((message) => (
-          <Message
-            key={message.id}
-            id={message.id}
-            content={message.content}
-            userName={message.userName}
-            userImage={message.userImage}
-            createdAt={message.createdAt}
-            userId={message.userId}
-            channelId={message.channelId}
-            reactions={message.reactions}
-            fileUrl={message.fileUrl ?? undefined}
-            fileName={message.fileName ?? undefined}
-            fileType={message.fileType ?? undefined}
-            isThreadReply={false}
-            isDM={isDM}
-            onDelete={handleDelete}
-            onEdit={handleEdit}
-            onReact={handleReact}
-            onRemoveReaction={handleRemoveReaction}
-            onThreadClick={isDM ? undefined : () => handleThreadClick(message)}
-          />
-        ))}
-        <div ref={bottomRef} />
-      </div>
+            <div>
+              {messages.map((message) => (
+                <Message
+                  key={message.id}
+                  {...message}
+                  onDelete={handleDelete}
+                  onEdit={handleEdit}
+                  onReact={handleReact}
+                  onRemoveReaction={handleRemoveReaction}
+                  onThreadClick={isDM ? undefined : () => handleThreadClick(message)}
+                  isThreadReply={false}
+                  isDM={isDM}
+                />
+              ))}
+              <div ref={bottomRef} />
+            </div>
           </div>
         </div>
 
@@ -532,6 +613,13 @@ export default function MessageList({
               >
                 <PaperclipIcon className="h-5 w-5 text-gray-500" />
               </button>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                className="p-2 hover:bg-gray-100 rounded"
+              >
+                <Wand2 className="h-5 w-5 text-purple-500" />
+              </button>
               <input
                 type="text"
                 value={newMessage}
@@ -563,4 +651,4 @@ export default function MessageList({
       )}
     </div>
   )
-} 
+}

@@ -92,6 +92,8 @@ model Message {
   reactions   Reaction[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  isEdited    Boolean  @default(false)
+  isVectorized Boolean @default(false)
 
   @@index([channelId])
   @@index([workspaceId])

@@ -7,11 +7,23 @@ export async function POST(req: Request) {
   try {
     const { userId } = auth()
     const user = await currentUser()
-    const { content, workspaceId, receiverId, fileUrl, fileName, fileType } = await req.json()
-
+    
     if (!userId || !user) {
+      console.error('[DIRECT_MESSAGES_POST] Auth failed:', { userId, user });
       return new NextResponse('Unauthorized', { status: 401 })
     }
+
+    const body = await req.json()
+    console.log('[DIRECT_MESSAGES_POST] Request body:', body);
+    
+    const { content, workspaceId, receiverId, fileUrl, fileName, fileType } = body
+    
+    if (!workspaceId || !receiverId) {
+      console.error('[DIRECT_MESSAGES_POST] Missing required fields:', { workspaceId, receiverId });
+      return new NextResponse('Missing required fields', { status: 400 })
+    }
+
+    console.log('[DIRECT_MESSAGES_POST] Looking up members:', { userId, workspaceId, receiverId });
 
     // Get both sender and receiver workspace member data
     const [sender, receiver] = await Promise.all([
@@ -31,13 +43,19 @@ export async function POST(req: Request) {
       })
     ]);
 
+    console.log('[DIRECT_MESSAGES_POST] Found members:', { sender, receiver });
+
     if (!receiver) {
+      console.error('[DIRECT_MESSAGES_POST] Receiver not found:', { receiverId, workspaceId });
       return new NextResponse('Receiver not found', { status: 404 })
     }
 
     if (!sender) {
+      console.error('[DIRECT_MESSAGES_POST] Sender not found:', { userId, workspaceId });
       return new NextResponse('Sender not found', { status: 404 })
     }
+
+    console.log('[DIRECT_MESSAGES_POST] Creating message');
 
     const message = await prisma.directMessage.create({
       data: {
@@ -58,6 +76,8 @@ export async function POST(req: Request) {
       }
     })
 
+    console.log('[DIRECT_MESSAGES_POST] Message created:', message);
+
     const formattedMessage = {
       id: message.id,
       content: message.content,
@@ -77,8 +97,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json(formattedMessage)
   } catch (error) {
-    console.error('[DIRECT_MESSAGES_POST]', error)
-    return new NextResponse('Internal Error', { status: 500 })
+    console.error('[DIRECT_MESSAGES_POST] Detailed error:', error)
+    // Return the actual error message in development
+    return new NextResponse(error instanceof Error ? error.message : 'Internal Error', { status: 500 })
   }
 }
 
