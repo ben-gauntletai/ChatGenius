@@ -79,6 +79,8 @@ describe('Message Vectorization', () => {
     
     expect(queryResult).toBeDefined();
     expect(queryResult.length).toBeGreaterThan(0);
-    expect(queryResult[0].metadata.userId).toBe('test_user_id');
+    const firstResult = queryResult[0];
+    expect(firstResult).toBeDefined();
+    expect(firstResult.metadata!.userId).toBe('test_user_id');
   });
 }); 
