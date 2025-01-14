@@ -116,12 +116,16 @@ export async function POST(req: Request) {
         try {
           console.log('[DIRECT_MESSAGES_POST] Auto-response is enabled for receiver');
           
-          // Construct URL using the request URL as base
-          const url = new URL('/api/generate-response', req.url);
-          console.log('[DIRECT_MESSAGES_POST] Making auto-response request to:', url.toString());
+          // Get base URL from request headers or environment
+          const protocol = req.headers.get('x-forwarded-proto') || 'http';
+          const host = req.headers.get('host') || process.env.VERCEL_URL || 'localhost:3000';
+          const baseUrl = `${protocol}://${host}`;
+          const generateResponseUrl = `${baseUrl}/api/generate-response`;
+          
+          console.log('[DIRECT_MESSAGES_POST] Making auto-response request to:', generateResponseUrl);
 
           // Generate auto-response
-          const autoResponse = await fetch(url, {
+          const autoResponse = await fetch(generateResponseUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
