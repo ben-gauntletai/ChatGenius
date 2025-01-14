@@ -114,7 +114,11 @@ export async function POST(req: Request) {
       // Handle auto-response asynchronously
       (async () => {
         try {
-          console.log('[DIRECT_MESSAGES_POST] Auto-response is enabled for receiver');
+          console.log('[DIRECT_MESSAGES_POST] Auto-response flow starting:', {
+            receiverId,
+            workspaceId,
+            messageContent: content
+          });
           
           // Get base URL from request headers or environment
           const protocol = req.headers.get('x-forwarded-proto') || 'http';
@@ -122,9 +126,24 @@ export async function POST(req: Request) {
           const baseUrl = `${protocol}://${host}`;
           const generateResponseUrl = `${baseUrl}/api/generate-response`;
           
-          console.log('[DIRECT_MESSAGES_POST] Making auto-response request to:', generateResponseUrl);
+          console.log('[DIRECT_MESSAGES_POST] Request details:', {
+            protocol,
+            host,
+            baseUrl,
+            generateResponseUrl,
+            headers: {
+              'x-forwarded-proto': req.headers.get('x-forwarded-proto'),
+              'host': req.headers.get('host')
+            }
+          });
 
           // Generate auto-response
+          console.log('[DIRECT_MESSAGES_POST] Sending auto-response request with body:', {
+            prompt: content,
+            userId: receiverId,
+            workspaceId
+          });
+
           const autoResponse = await fetch(generateResponseUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -135,36 +154,60 @@ export async function POST(req: Request) {
             })
           });
           
-          console.log('[DIRECT_MESSAGES_POST] Auto-response status:', autoResponse.status);
+          console.log('[DIRECT_MESSAGES_POST] Auto-response initial response:', {
+            status: autoResponse.status,
+            statusText: autoResponse.statusText,
+            headers: Object.fromEntries(autoResponse.headers.entries())
+          });
           
           if (!autoResponse.ok) {
             const errorText = await autoResponse.text();
             console.error('[DIRECT_MESSAGES_POST] Auto-response failed:', {
               status: autoResponse.status,
               statusText: autoResponse.statusText,
-              error: errorText
+              error: errorText,
+              url: generateResponseUrl
             });
             return;
           }
 
-          const { response } = await autoResponse.json();
-          console.log('[DIRECT_MESSAGES_POST] Got auto-response:', response);
+          const responseData = await autoResponse.json();
+          console.log('[DIRECT_MESSAGES_POST] Auto-response data received:', responseData);
+
+          if (!responseData.response) {
+            console.error('[DIRECT_MESSAGES_POST] Missing response in data:', responseData);
+            return;
+          }
+
+          console.log('[DIRECT_MESSAGES_POST] Creating auto-response message with:', {
+            content: responseData.response,
+            workspaceId,
+            senderId: receiverId,
+            receiverId: userId,
+            senderName: receiver.userName,
+            receiverName: sender.userName
+          });
           
           // Create auto-response message
           const autoResponseMessage = await prisma.directMessage.create({
             data: {
-              content: response,
+              content: responseData.response,
               workspaceId,
               senderId: receiverId,
               senderName: receiver.userName || 'User',
               senderImage: receiver.userImage?.startsWith('/api/files/') ? receiver.userImage : null,
               receiverId: userId,
               receiverName: sender.userName || 'User',
-              receiverImage: sender.userImage?.startsWith('/api/files/') ? sender.userImage : null,
+              receiverImage: sender.userImage?.startsWith('/api/files/') ? receiver.userImage : null,
             },
             include: {
               reactions: true
             }
+          });
+
+          console.log('[DIRECT_MESSAGES_POST] Auto-response message created:', {
+            messageId: autoResponseMessage.id,
+            content: autoResponseMessage.content
           });
 
           // Format and broadcast auto-response
