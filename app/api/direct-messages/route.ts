@@ -104,7 +104,7 @@ export async function POST(req: Request) {
     await pusherServer.trigger(channelName, 'new-message', formattedMessage);
 
     // Vectorize the message asynchronously
-    (async () => {
+    void (async () => {
       try {
         await storeMessagesAsVectors([{
           id: message.id,
@@ -127,12 +127,10 @@ export async function POST(req: Request) {
           isVectorized: false
         }]);
         console.log('[DIRECT_MESSAGES_POST] Message vectorized:', message.id);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('[DIRECT_MESSAGES_POST] Failed to vectorize message:', error);
       }
-    })().catch(error => {
-      console.error('[DIRECT_MESSAGES_POST] Async vectorization error:', error);
-    });
+    })();
 
     // Check if receiver has auto-response enabled and handle asynchronously
     const receiverMember = (await prisma.workspaceMember.findFirst({

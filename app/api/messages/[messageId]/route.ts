@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/utils/pusher'
+import { deleteMessageVectors } from '@/lib/vector-store'
 
 export async function PATCH(
   req: Request,
@@ -107,6 +108,7 @@ export async function DELETE(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
+    // Delete the message from the database
     await prisma.message.delete({
       where: {
         id: params.messageId
@@ -127,6 +129,15 @@ export async function DELETE(
       'message-delete',
       params.messageId
     )
+
+    // Delete the vector from Pinecone asynchronously
+    void (async () => {
+      try {
+        await deleteMessageVectors([params.messageId]);
+      } catch (error: unknown) {
+        console.error('[MESSAGE_DELETE] Failed to delete vector:', error);
+      }
+    })();
 
     return new NextResponse(null, { status: 200 })
   } catch (error) {

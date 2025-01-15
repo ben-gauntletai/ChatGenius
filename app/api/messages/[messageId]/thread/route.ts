@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/utils/pusher'
+import { storeMessagesAsVectors } from '@/lib/vector-store'
 
 export async function GET(
   req: Request,
@@ -151,6 +152,16 @@ export async function POST(
       'message-update',
       formattedParentMessage
     );
+
+    // Vectorize the thread message asynchronously
+    void (async () => {
+      try {
+        await storeMessagesAsVectors([threadMessage]);
+        console.log('[THREAD_POST] Message vectorized:', threadMessage.id);
+      } catch (error: unknown) {
+        console.error('[THREAD_POST] Failed to vectorize message:', error);
+      }
+    })();
 
     return NextResponse.json(formattedThreadMessage);
   } catch (error) {

@@ -170,4 +170,16 @@ export const getContextAndGenerateResponse = async (prompt: string, userId: stri
     prompt,
     context
   };
+};
+
+// Function to delete vectors from Pinecone
+export const deleteMessageVectors = async (messageIds: string[]) => {
+  try {
+    const index = initVectorStore();
+    await index.deleteMany(messageIds);
+    console.log('[VECTOR_STORE] Deleted vectors for messages:', messageIds);
+  } catch (error) {
+    console.error('[VECTOR_STORE] Failed to delete vectors:', error);
+    throw error;
+  }
 }; 
