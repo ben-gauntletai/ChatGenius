@@ -69,6 +69,7 @@ export default function MessageList({
     name: string;
     type: string;
   } | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Initialize messages
   useEffect(() => {
@@ -501,14 +502,34 @@ export default function MessageList({
   }, []);
 
   const handleGenerate = async () => {
-    const messages = Object.values(allMessages);
-    if (messages.length === 0) return;
+    const currentMessages = Object.values(allMessages);
+    if (currentMessages.length === 0) return;
     
+    setIsGenerating(true);
     try {
       // Get the last message as the prompt
-      const lastMessage = messages[messages.length - 1];
+      const lastMessage = currentMessages[currentMessages.length - 1];
       console.log('Using last message as prompt:', lastMessage.content);
       
+      // Add temporary loading message
+      const tempId = 'temp-' + Date.now();
+      const loadingMessage = {
+        id: tempId,
+        content: '',
+        createdAt: new Date(),
+        userId: 'system',
+        userName: 'AI Assistant',
+        userImage: '/ai-avatar.png',
+        reactions: [],
+        isLoading: true
+      };
+      
+      // Update allMessages to include loading message
+      setAllMessages(prev => ({
+        ...prev,
+        [tempId]: loadingMessage
+      }));
+
       // Generate response using the context
       const response = await fetch('/api/generate-response', {
         method: 'POST',
@@ -523,6 +544,13 @@ export default function MessageList({
       if (!response.ok) throw new Error('Failed to generate response');
       const data = await response.json();
       
+      // Remove loading message before sending actual message
+      setAllMessages(prev => {
+        const updated = { ...prev };
+        delete updated[tempId];
+        return updated;
+      });
+      
       // Send the AI-generated response
       const messageData = {
         content: data.response,
@@ -536,7 +564,6 @@ export default function MessageList({
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          // Add Clerk session token if available
           ...(window.__clerk_db_jwt && {
             'Authorization': `Bearer ${window.__clerk_db_jwt}`
           })
@@ -553,6 +580,8 @@ export default function MessageList({
     } catch (error) {
       console.error('Error in generate flow:', error);
       setNewMessage('Failed to generate and send response. Please try again.');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -616,9 +645,15 @@ export default function MessageList({
               <button
                 type="button"
                 onClick={handleGenerate}
-                className="p-2 hover:bg-gray-100 rounded"
+                disabled={isGenerating}
+                className="p-2 hover:bg-gray-100 rounded flex items-center gap-2 disabled:opacity-50"
               >
-                <Wand2 className="h-5 w-5 text-purple-500" />
+                {isGenerating ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-purple-500" />
+                ) : (
+                  <Wand2 className="h-5 w-5 text-purple-500" />
+                )}
+                <span className="text-purple-500">{isGenerating ? 'Generating...' : 'Generate'}</span>
               </button>
               <input
                 type="text"
