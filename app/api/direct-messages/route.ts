@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/utils/pusher'
+import { storeMessagesAsVectors } from '@/lib/vector-store'
 import type { WorkspaceMember } from '@prisma/client'
 
 // Temporary type to help TypeScript recognize the autoResponseEnabled field
@@ -82,6 +83,34 @@ export async function POST(req: Request) {
         reactions: true
       }
     });
+
+    // Immediately vectorize the message
+    try {
+      await storeMessagesAsVectors([{
+        id: message.id,
+        content: message.content,
+        userId: message.senderId,
+        userName: message.senderName,
+        userImage: message.senderImage,
+        workspaceId: message.workspaceId,
+        channelId: `dm-${[userId, receiverId].sort().join('-')}`, // Use DM channel ID for context
+        createdAt: message.createdAt,
+        updatedAt: message.updatedAt,
+        fileUrl: message.fileUrl,
+        fileName: message.fileName,
+        fileType: message.fileType,
+        threadId: null,
+        isThreadReply: false,
+        parentMessageId: null,
+        replyCount: 0,
+        isEdited: false,
+        isVectorized: false
+      }]);
+      console.log('[DIRECT_MESSAGES_POST] Message vectorized:', message.id);
+    } catch (error) {
+      console.error('[DIRECT_MESSAGES_POST] Failed to vectorize message:', error);
+      // Don't block message creation if vectorization fails
+    }
 
     // Format and send the original message immediately
     const formattedMessage = {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/utils/pusher'
+import { storeMessagesAsVectors } from '@/lib/vector-store'
 
 export async function POST(req: Request) {
   try {
@@ -63,6 +64,15 @@ export async function POST(req: Request) {
         reactions: true
       }
     });
+
+    // Immediately vectorize the message
+    try {
+      await storeMessagesAsVectors([message]);
+      console.log('[MESSAGES_POST] Message vectorized:', message.id);
+    } catch (error) {
+      console.error('[MESSAGES_POST] Failed to vectorize message:', error);
+      // Don't block message creation if vectorization fails
+    }
 
     console.log('Created message:', message); // Debug log
 
