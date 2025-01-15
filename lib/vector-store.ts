@@ -155,10 +155,13 @@ export const getContextAndGenerateResponse = async (prompt: string, userId: stri
   // 2. Query vector store for relevant messages from this user
   const matches = await queryMessageVectors(prompt, filters);
   
-  // 3. Format context from matches
+  // 3. Format context from matches with metadata
   const context = matches
-    .filter(m => m.metadata && typeof m.metadata === 'object' && 'content' in m.metadata)
-    .map(m => (m.metadata as { content: string }).content)
+    .filter(m => m.metadata && typeof m.metadata === 'object')
+    .map(m => {
+      const metadata = m.metadata as { content: string; userName: string; createdAt: string };
+      return `${metadata.userName} (${new Date(metadata.createdAt).toLocaleString()}): ${metadata.content}`;
+    })
     .join('\n');
 
   console.log('[VECTOR_STORE] Found messages from user:', context);

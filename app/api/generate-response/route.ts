@@ -2,6 +2,7 @@ import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs';
 import { getContextAndGenerateResponse } from '@/lib/vector-store';
+import { PrismaClient } from '@prisma/client';
 
 interface PromptVariables {
   query: string;
@@ -12,9 +13,11 @@ const createPrompt = (template: string, variables: PromptVariables): string => {
   return template.replace(/{(\w+)}/g, (_, key) => variables[key as keyof PromptVariables] || '');
 };
 
+const prisma = new PrismaClient();
+
 export async function POST(req: Request) {
   try {
-    const { prompt, channelId, workspaceId, userId: requestUserId } = await req.json();
+    const { prompt, channelId, workspaceId, userId: requestUserId, receiverId } = await req.json();
     
     // Get userId either from auth or request body
     const { userId: authUserId } = auth();
@@ -23,7 +26,17 @@ export async function POST(req: Request) {
     if (!userId) {
       return new NextResponse('Unauthorized - No userId provided', { status: 401 });
     }
-    
+
+    // Get sender and receiver workspace member info
+    const [senderMember, receiverMember] = await Promise.all([
+      prisma.workspaceMember.findFirst({
+        where: { userId, workspaceId }
+      }),
+      receiverId ? prisma.workspaceMember.findFirst({
+        where: { userId: receiverId, workspaceId }
+      }) : null
+    ]);
+
     // Get context and formatted prompt
     const { prompt: userPrompt, context } = await getContextAndGenerateResponse(
       prompt,
@@ -47,6 +60,8 @@ export async function POST(req: Request) {
 
     // Log for debugging
     console.log('Formatted prompt:', formattedPrompt);
+    console.log('Sender:', senderMember);
+    console.log('Receiver:', receiverMember);
 
     // Generate response using OpenAI
     const openai = new OpenAI({
@@ -60,11 +75,15 @@ export async function POST(req: Request) {
       messages: [
         {
           role: "system",
-          content: `You are generating an automated response on behalf of a user. The following messages show their writing style:
+          content: `You are generating an response on behalf of ${receiverMember?.userName || 'a user'}. 
+
+          The following messages show the receiver's writing style:
 
           ${context}
 
-          You must match their exact writing style, including tone, formality, and any patterns in how they communicate. Your response should feel indistinguishable from their natural way of writing.`
+          You must match their exact writing style, including tone, formality, length, and any other patterns in how they communicate. Your response should feel indistinguishable from their natural way of writing.
+          
+          You are responding as ${receiverMember?.userName || 'the receiver'} to a message from ${senderMember?.userName || 'the sender'}.`
         },
         {
           role: "user",

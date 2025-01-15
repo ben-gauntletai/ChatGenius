@@ -65,19 +65,22 @@ export async function POST(req: Request) {
       }
     });
 
-    // Immediately vectorize the message
-    try {
-      await storeMessagesAsVectors([message]);
-      console.log('[MESSAGES_POST] Message vectorized:', message.id);
-    } catch (error) {
-      console.error('[MESSAGES_POST] Failed to vectorize message:', error);
-      // Don't block message creation if vectorization fails
-    }
+    // Trigger Pusher event with the message immediately
+    await pusherServer.trigger(`channel-${channelId}`, 'new-message', message);
+
+    // Vectorize the message asynchronously
+    (async () => {
+      try {
+        await storeMessagesAsVectors([message]);
+        console.log('[MESSAGES_POST] Message vectorized:', message.id);
+      } catch (error) {
+        console.error('[MESSAGES_POST] Failed to vectorize message:', error);
+      }
+    })().catch(error => {
+      console.error('[MESSAGES_POST] Async vectorization error:', error);
+    });
 
     console.log('Created message:', message); // Debug log
-
-    // Trigger Pusher event with the message
-    await pusherServer.trigger(`channel-${channelId}`, 'new-message', message);
 
     return NextResponse.json(message);
   } catch (error) {

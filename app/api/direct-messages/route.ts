@@ -84,34 +84,6 @@ export async function POST(req: Request) {
       }
     });
 
-    // Immediately vectorize the message
-    try {
-      await storeMessagesAsVectors([{
-        id: message.id,
-        content: message.content,
-        userId: message.senderId,
-        userName: message.senderName,
-        userImage: message.senderImage,
-        workspaceId: message.workspaceId,
-        channelId: `dm-${[userId, receiverId].sort().join('-')}`, // Use DM channel ID for context
-        createdAt: message.createdAt,
-        updatedAt: message.updatedAt,
-        fileUrl: message.fileUrl,
-        fileName: message.fileName,
-        fileType: message.fileType,
-        threadId: null,
-        isThreadReply: false,
-        parentMessageId: null,
-        replyCount: 0,
-        isEdited: false,
-        isVectorized: false
-      }]);
-      console.log('[DIRECT_MESSAGES_POST] Message vectorized:', message.id);
-    } catch (error) {
-      console.error('[DIRECT_MESSAGES_POST] Failed to vectorize message:', error);
-      // Don't block message creation if vectorization fails
-    }
-
     // Format and send the original message immediately
     const formattedMessage = {
       id: message.id,
@@ -130,6 +102,37 @@ export async function POST(req: Request) {
     // Create channel name for Pusher
     const channelName = `dm-${[userId, receiverId].sort().join('-')}`;
     await pusherServer.trigger(channelName, 'new-message', formattedMessage);
+
+    // Vectorize the message asynchronously
+    (async () => {
+      try {
+        await storeMessagesAsVectors([{
+          id: message.id,
+          content: message.content,
+          userId: message.senderId,
+          userName: message.senderName,
+          userImage: message.senderImage,
+          workspaceId: message.workspaceId,
+          channelId: `dm-${[userId, receiverId].sort().join('-')}`,
+          createdAt: message.createdAt,
+          updatedAt: message.updatedAt,
+          fileUrl: message.fileUrl,
+          fileName: message.fileName,
+          fileType: message.fileType,
+          threadId: null,
+          isThreadReply: false,
+          parentMessageId: null,
+          replyCount: 0,
+          isEdited: false,
+          isVectorized: false
+        }]);
+        console.log('[DIRECT_MESSAGES_POST] Message vectorized:', message.id);
+      } catch (error) {
+        console.error('[DIRECT_MESSAGES_POST] Failed to vectorize message:', error);
+      }
+    })().catch(error => {
+      console.error('[DIRECT_MESSAGES_POST] Async vectorization error:', error);
+    });
 
     // Check if receiver has auto-response enabled and handle asynchronously
     const receiverMember = (await prisma.workspaceMember.findFirst({
