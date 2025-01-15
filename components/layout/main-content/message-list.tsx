@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import Message from './message'
 import Thread from './thread'
@@ -70,6 +70,15 @@ export default function MessageList({
     type: string;
   } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [autoResponseState, setAutoResponseState] = useState({
+    isEnabled: false,
+    isResponding: false
+  });
+  const lastMessageRef = useRef<string | null>(null);
+  const [otherUserInfo, setOtherUserInfo] = useState<{
+    userName?: string;
+    userImage?: string | null;
+  }>({});
 
   // Initialize messages
   useEffect(() => {
@@ -86,10 +95,113 @@ export default function MessageList({
 
     subscribeToChannel(channelName)
     
+    // Set up Pusher subscription
+    const channel = pusherClient.subscribe(channelName);
+    
+    const handleMessage = (message: MessageType) => {
+      console.log('[DEBUG] Received message:', message);
+      console.log('[DEBUG] Current lastMessageRef:', lastMessageRef.current);
+      console.log('[DEBUG] Message userId:', message.userId, 'otherUserId:', otherUserId, 'userId:', userId);
+      
+      if (isDM) {
+        if (message.userId === userId) {
+          // This is our message, store it as the last message
+          lastMessageRef.current = message.id;
+          // Our message was sent, show loading if auto-response is enabled
+          setAutoResponseState(current => ({
+            ...current,
+            isResponding: current.isEnabled
+          }));
+        } else if (message.userId === otherUserId && lastMessageRef.current) {
+          // This is a response to our message
+          console.log('[DEBUG] Received response, clearing state');
+          setAutoResponseState(current => ({
+            ...current,
+            isResponding: false
+          }));
+          lastMessageRef.current = null;
+        }
+        
+        addMessage(message);
+        setAllMessages(current => ({
+          ...current,
+          [message.id]: {
+            ...message,
+            userName: message.userName || current[message.id]?.userName,
+            userImage: message.userImage || current[message.id]?.userImage
+          }
+        }));
+        
+        setTimeout(() => {
+          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+        return;
+      }
+      
+      // For regular messages, skip thread messages
+      if (message.threadId || message.isThreadReply) {
+        console.log('Skipping thread message:', message);
+        return;
+      }
+      
+      // Use addMessage for consistency with the context
+      addMessage(message);
+      setAllMessages(current => ({
+        ...current,
+        [message.id]: {
+          ...message,
+          userName: message.userName || current[message.id]?.userName,
+          userImage: message.userImage || current[message.id]?.userImage
+        }
+      }));
+
+      // Scroll for new main messages
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    };
+
+    const handleDelete = (messageId: string) => {
+      deleteMessage(messageId); // Use deleteMessage from context
+      setAllMessages(current => {
+        const { [messageId]: deleted, ...rest } = current;
+        return rest;
+      });
+    };
+
+    const handleUpdate = (message: MessageType) => {
+      updateMessage(message); // Use updateMessage from context
+      handleMessage(message);
+    };
+
+    channel.bind('new-message', handleMessage);
+    channel.bind('message-update', handleUpdate);
+    channel.bind('message-delete', handleDelete);
+
     return () => {
-      unsubscribeFromChannel(channelName)
-    }
-  }, [channelId, isDM, otherUserId, userId])
+      channel.unbind('new-message', handleMessage);
+      channel.unbind('message-update', handleUpdate);
+      channel.unbind('message-delete', handleDelete);
+      pusherClient.unsubscribe(channelName);
+      unsubscribeFromChannel(channelName);
+      // Only clear states if we're actually changing channels
+      if (channelId) {
+        setAutoResponseState(current => ({
+          ...current,
+          isResponding: false
+        }));
+        lastMessageRef.current = null;
+      }
+    };
+  }, [channelId, isDM, otherUserId, userId, addMessage, updateMessage, deleteMessage, setAutoResponseState]);
+
+  // Add an effect to sync the ref with the state
+  useEffect(() => {
+    setAutoResponseState(current => ({
+      ...current,
+      isResponding: current.isEnabled
+    }));
+  }, []);
 
   // Get filtered messages for this channel or DM
   const messages = isDM 
@@ -156,94 +268,90 @@ export default function MessageList({
     fetchMessages();
   }, [channelId, isDM, workspaceId, otherUserId, members]);
 
-  // Pusher subscription
+  // Update other user info when members change
   useEffect(() => {
-    if (!channelId && !isDM) return;
+    if (!isDM || !otherUserId || !members.length) return;
     
-    const channelName = isDM 
-      ? `dm-${[otherUserId, userId].sort().join('-')}` 
-      : `channel-${channelId}`
-    
-    console.log('Subscribing to channel:', channelName);
-    pusherClient.unsubscribe(channelName);
-    const channel = pusherClient.subscribe(channelName);
-
-    const handleMessage = (message: MessageType) => {
-      console.log('Received message:', message);
-      
-      // For DMs, add all messages
-      if (isDM) {
-        setAllMessages(current => ({
-          ...current,
-          [message.id]: {
-            ...message,
-            userName: message.userName || current[message.id]?.userName,
-            userImage: message.userImage || current[message.id]?.userImage
-          }
-        }));
-        
-        setTimeout(() => {
-          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-        return;
-      }
-      
-      // For regular messages, skip thread messages
-      if (message.threadId || message.isThreadReply) {
-        console.log('Skipping thread message:', message);
-        return;
-      }
-      
-      setAllMessages(current => ({
-        ...current,
-        [message.id]: {
-          ...message,
-          userName: message.userName || current[message.id]?.userName,
-          userImage: message.userImage || current[message.id]?.userImage
-        }
-      }));
-
-      // Scroll for new main messages
-      setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    };
-
-    const handleDelete = (messageId: string) => {
-      setAllMessages(current => {
-        const { [messageId]: deleted, ...rest } = current;
-        return rest;
+    const otherMember = members.find(m => m.userId === otherUserId);
+    if (otherMember) {
+      setOtherUserInfo({
+        userName: otherMember.userName,
+        userImage: otherMember.userImage
       });
-    };
+      setAutoResponseState(current => ({
+        ...current,
+        isEnabled: Boolean(otherMember.autoResponseEnabled)
+      }));
+    }
+  }, [isDM, otherUserId, members]);
 
-    channel.bind('new-message', handleMessage);
-    channel.bind('message-update', handleMessage);
-    channel.bind('message-delete', handleDelete);
-
-    return () => {
-      channel.unbind('new-message', handleMessage);
-      channel.unbind('message-update', handleMessage);
-      channel.unbind('message-delete', handleDelete);
-      pusherClient.unsubscribe(channelName);
-    };
-  }, [channelId, isDM, otherUserId, userId]);
-
-  // Scroll to bottom when messages update
+  // Add this effect near the top with other effects
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const checkAutoResponse = async () => {
+      if (!isDM || !workspaceId || !otherUserId) return;
+
+      try {
+        const token = await window.Clerk?.session?.getToken();
+        if (!token) return;
+
+        console.log('[DEBUG] Checking auto-response status');
+        const response = await fetch(`/api/workspaces/${workspaceId}/members/${otherUserId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('[DEBUG] Member data:', data);
+          
+          // Force update the state
+          setAutoResponseState(current => ({
+            ...current,
+            isEnabled: Boolean(data.autoResponseEnabled)
+          }));
+          
+          console.log('[DEBUG] Updated auto-response state:', {
+            isEnabled: Boolean(data.autoResponseEnabled)
+          });
+        }
+      } catch (error) {
+        console.error('[DEBUG] Error checking auto-response:', error);
+      }
+    };
+
+    checkAutoResponse();
+  }, [isDM, workspaceId, otherUserId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim() && !selectedFile) return
 
     try {
-      // Get the Clerk session token
       const token = await window.Clerk?.session?.getToken();
-      
       if (!token) {
         console.error('No auth token available');
         throw new Error('Authentication required');
+      }
+
+      // Check auto-response status before sending
+      if (isDM && workspaceId && otherUserId) {
+        const receiverResponse = await fetch(`/api/workspaces/${workspaceId}/members/${otherUserId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        
+        if (receiverResponse.ok) {
+          const receiverData = await receiverResponse.json();
+          console.log('[DEBUG] Pre-send receiver data:', receiverData);
+          
+          // Force update the state
+          setAutoResponseState({
+            isEnabled: Boolean(receiverData.autoResponseEnabled),
+            isResponding: Boolean(receiverData.autoResponseEnabled)
+          });
+        }
       }
 
       let uploadResult;
@@ -270,7 +378,11 @@ export default function MessageList({
         fileType: selectedFile?.type
       }
 
-      console.log('Sending message with data:', messageData);
+      console.log('[DEBUG] Sending message with data:', messageData);
+      console.log('[DEBUG] isDM:', isDM);
+      console.log('[DEBUG] workspaceId:', workspaceId);
+      console.log('[DEBUG] otherUserId:', otherUserId);
+      console.log('[DEBUG] Current auto-response state:', autoResponseState);
 
       const response = await fetch(isDM ? '/api/direct-messages' : '/api/messages', {
         method: 'POST',
@@ -282,22 +394,44 @@ export default function MessageList({
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        console.error('Error response:', errorData);
-        throw new Error(errorData?.message || 'Failed to send message');
+        const errorText = await response.text();
+        console.error('[DEBUG] Error response:', errorText);
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData?.message || 'Failed to send message');
+        } catch (e) {
+          throw new Error('Failed to send message');
+        }
       }
 
       const responseData = await response.json();
-      console.log('Message sent successfully:', responseData);
+      console.log('[DEBUG] Message sent successfully:', responseData);
 
       setNewMessage('')
       setSelectedFile(null)
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
+
+      // After successful message send, update lastMessageRef
+      if (responseData && responseData.id) {
+        lastMessageRef.current = responseData.id;
+        if (autoResponseState.isEnabled) {
+          console.log('[DEBUG] Message sent successfully, ensuring dots are shown');
+          setAutoResponseState(current => ({
+            ...current,
+            isResponding: true
+          }));
+        }
+      }
+
     } catch (error) {
-      console.error('Error sending message:', error)
+      console.error('[DEBUG] Error sending message:', error)
       alert('Failed to send message. Please try again.')
+      setAutoResponseState(current => ({
+        ...current,
+        isResponding: false
+      }));
     }
   }
 
@@ -585,13 +719,33 @@ export default function MessageList({
     }
   };
 
+  const StateDebug = () => {
+    if (process.env.NODE_ENV === 'development') {
+      return (
+        <div className="fixed top-0 right-0 bg-black/50 text-white p-2 text-xs">
+          <div>isDM: {String(isDM)}</div>
+          <div>autoResponse.isEnabled: {String(autoResponseState.isEnabled)}</div>
+          <div>autoResponse.isResponding: {String(autoResponseState.isResponding)}</div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="flex-1 flex h-full">
+      <StateDebug />
       <div className="flex-1 flex flex-col h-full relative">
-        <div className="flex-1 overflow-y-auto">
-          <div className="flex flex-col min-h-full justify-end">
-            <div className="flex-1" />
-            <div>
+        <div className="absolute inset-0 bottom-[88px]">
+          <div className="h-full overflow-y-auto">
+            <div className="flex flex-col">
+              {/* Debug logs */}
+              {(() => {
+                console.log('[DEBUG] Rendering - autoResponseState:', autoResponseState);
+                console.log('[DEBUG] Rendering - isDM:', isDM);
+                console.log('[DEBUG] Rendering - otherUserInfo:', otherUserInfo);
+                return null;
+              })()}
               {messages.map((message) => (
                 <Message
                   key={message.id}
@@ -605,12 +759,34 @@ export default function MessageList({
                   isDM={isDM}
                 />
               ))}
+              {isDM && autoResponseState.isEnabled && autoResponseState.isResponding && (
+                <div className="flex items-center gap-2 p-4 bg-[#f9fafb]">
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
+                    {otherUserInfo.userImage ? (
+                      <img 
+                        src={otherUserInfo.userImage} 
+                        alt={otherUserInfo.userName || 'User'} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-purple-500 text-white text-sm">
+                        {otherUserInfo.userName?.[0]?.toUpperCase() || '?'}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-3">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              )}
               <div ref={bottomRef} />
             </div>
           </div>
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t">
+        <div className="absolute bottom-0 left-0 right-0 bg-white border-t z-10">
           <form onSubmit={handleSubmit} className="p-4">
             {selectedFile && (
               <div className="mb-2 p-2 bg-gray-100 rounded flex items-center justify-between">

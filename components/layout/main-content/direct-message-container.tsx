@@ -18,12 +18,10 @@ export default function DirectMessageContainer({
 }: DirectMessageContainerProps) {
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 flex flex-col">
-        <DirectMessageHeader
-          userId={otherUser.userId}
-          workspaceId={workspaceId}
-        />
-      </div>
+      <DirectMessageHeader
+        userId={otherUser.userId}
+        workspaceId={workspaceId}
+      />
       <MessageList 
         initialMessages={initialMessages}
         isDM={true}

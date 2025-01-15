@@ -230,12 +230,12 @@ export default function Message({
     )
   }
 
-  console.log('Message render:', {
-    content,
-    fileUrl,
-    fileName,
-    fileType
-  });
+  // console.log('Message render:', {
+  //   content,
+  //   fileUrl,
+  //   fileName,
+  //   fileType
+  // });
 
   return (
     <div 
