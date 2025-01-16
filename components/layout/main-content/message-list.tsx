@@ -105,16 +105,10 @@ export default function MessageList({
       
       if (isDM) {
         if (message.userId === userId) {
-          // This is our message, store it as the last message
+          // We sent this message
           lastMessageRef.current = message.id;
-          // Our message was sent, show loading if auto-response is enabled
-          setAutoResponseState(current => ({
-            ...current,
-            isResponding: current.isEnabled
-          }));
-        } else if (message.userId === otherUserId && lastMessageRef.current) {
-          // This is a response to our message
-          console.log('[DEBUG] Received response, clearing state');
+        } else if (message.userId === otherUserId) {
+          // We received a message from the other user
           setAutoResponseState(current => ({
             ...current,
             isResponding: false
@@ -131,10 +125,6 @@ export default function MessageList({
             userImage: message.userImage || current[message.id]?.userImage
           }
         }));
-        
-        setTimeout(() => {
-          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
         return;
       }
       
@@ -154,11 +144,6 @@ export default function MessageList({
           userImage: message.userImage || current[message.id]?.userImage
         }
       }));
-
-      // Scroll for new main messages
-      setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
     };
 
     const handleDelete = (messageId: string) => {
@@ -193,15 +178,7 @@ export default function MessageList({
         lastMessageRef.current = null;
       }
     };
-  }, [channelId, isDM, otherUserId, userId, addMessage, updateMessage, deleteMessage, setAutoResponseState]);
-
-  // Add an effect to sync the ref with the state
-  useEffect(() => {
-    setAutoResponseState(current => ({
-      ...current,
-      isResponding: current.isEnabled
-    }));
-  }, []);
+  }, [channelId, isDM, otherUserId, userId, addMessage, updateMessage, deleteMessage, setAutoResponseState, autoResponseState.isEnabled]);
 
   // Get filtered messages for this channel or DM
   const messages = isDM 
@@ -323,6 +300,12 @@ export default function MessageList({
     checkAutoResponse();
   }, [isDM, workspaceId, otherUserId]);
 
+  // Add this effect to handle scrolling when new messages are added
+  useEffect(() => {
+    // Always scroll to bottom when messages change
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim() && !selectedFile) return
@@ -346,11 +329,11 @@ export default function MessageList({
           const receiverData = await receiverResponse.json();
           console.log('[DEBUG] Pre-send receiver data:', receiverData);
           
-          // Force update the state
-          setAutoResponseState({
-            isEnabled: Boolean(receiverData.autoResponseEnabled),
-            isResponding: Boolean(receiverData.autoResponseEnabled)
-          });
+          // Only update isEnabled, don't set isResponding when we send a message
+          setAutoResponseState(current => ({
+            ...current,
+            isEnabled: Boolean(receiverData.autoResponseEnabled)
+          }));
         }
       }
 
@@ -413,11 +396,10 @@ export default function MessageList({
         fileInputRef.current.value = ''
       }
 
-      // After successful message send, update lastMessageRef
+      // After successful message send, set loading state if auto-response is enabled
       if (responseData && responseData.id) {
         lastMessageRef.current = responseData.id;
         if (autoResponseState.isEnabled) {
-          console.log('[DEBUG] Message sent successfully, ensuring dots are shown');
           setAutoResponseState(current => ({
             ...current,
             isResponding: true
@@ -645,24 +627,29 @@ export default function MessageList({
       const lastMessage = currentMessages[currentMessages.length - 1];
       console.log('Using last message as prompt:', lastMessage.content);
       
-      // Add temporary loading message
-      const tempId = 'temp-' + Date.now();
-      const loadingMessage = {
-        id: tempId,
-        content: '',
-        createdAt: new Date(),
-        userId: 'system',
-        userName: 'AI Assistant',
-        userImage: '/ai-avatar.png',
-        reactions: [],
-        isLoading: true
-      };
-      
-      // Update allMessages to include loading message
-      setAllMessages(prev => ({
-        ...prev,
-        [tempId]: loadingMessage
-      }));
+      // Only show loading message in non-DM chats
+      let tempId: string | undefined;
+      if (!isDM) {
+        // Add temporary loading message
+        const id = 'temp-' + Date.now();
+        tempId = id;
+        const loadingMessage = {
+          id,
+          content: '',
+          createdAt: new Date(),
+          userId: 'system',
+          userName: 'AI Assistant',
+          userImage: '/ai-avatar.png',
+          reactions: [],
+          isLoading: true
+        };
+        
+        // Update allMessages to include loading message
+        setAllMessages(prev => ({
+          ...prev,
+          [id]: loadingMessage
+        }));
+      }
 
       // Generate response using the context
       const response = await fetch('/api/generate-response', {
@@ -679,11 +666,13 @@ export default function MessageList({
       const data = await response.json();
       
       // Remove loading message before sending actual message
-      setAllMessages(prev => {
-        const updated = { ...prev };
-        delete updated[tempId];
-        return updated;
-      });
+      if (!isDM && tempId) {
+        setAllMessages(prev => {
+          const updated = { ...prev };
+          delete updated[tempId];
+          return updated;
+        });
+      }
       
       // Send the AI-generated response
       const messageData = {
@@ -737,7 +726,7 @@ export default function MessageList({
       <StateDebug />
       <div className="flex-1 flex flex-col h-full relative">
         <div className="absolute inset-0 bottom-[88px]">
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-y-auto flex flex-col justify-end">
             <div className="flex flex-col">
               {/* Debug logs */}
               {(() => {
