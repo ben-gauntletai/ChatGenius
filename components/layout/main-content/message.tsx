@@ -8,6 +8,7 @@ import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
 import { Message as MessageType, Reaction } from '@/types'
 import DefaultAvatar from '@/components/ui/default-avatar'
+import { useWorkspaceMembers } from '@/contexts/workspace-members-context'
 
 type MessageProps = MessageType & {
   onDelete: (messageId: string) => void
@@ -43,6 +44,7 @@ export default function Message({
   conversationId = false
 }: MessageProps) {
   const { userId: currentUserId } = useAuth()
+  const { members } = useWorkspaceMembers()
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState(content)
   const [isHovered, setIsHovered] = useState(false)
@@ -53,6 +55,10 @@ export default function Message({
   const emojiPickerRef = useRef<HTMLDivElement>(null)
 
   const isOwner = currentUserId === userId
+
+  // Get the latest user image from workspace members
+  const member = members.find(m => m.userId === userId)
+  const currentUserImage = member?.userImage || userImage
 
   const handleEmojiButtonClick = () => {
     if (!emojiButtonRef.current) return;
@@ -244,10 +250,10 @@ export default function Message({
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="relative w-10 h-10 flex-shrink-0">
-        {userImage?.startsWith('/api/files/') ? (
+        {currentUserImage ? (
           <div className="w-full h-full relative rounded-md overflow-hidden">
             <img
-              src={userImage}
+              src={currentUserImage}
               alt={userName}
               className="w-full h-full object-cover"
             />

@@ -55,7 +55,7 @@ export default function DirectMessageHeader({
   return (
     <div className="h-14 border-b flex items-center px-4 gap-3">
       <div className="relative w-6 h-6">
-        {member.hasCustomImage && member.userImage?.startsWith('/api/files/') ? (
+        {member.userImage ? (
           <div className="w-full h-full relative rounded-sm overflow-hidden">
             <img
               src={member.userImage}

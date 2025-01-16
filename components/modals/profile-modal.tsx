@@ -70,6 +70,8 @@ export default function ProfileModal({
       console.log('Saving profile with state:', {
         userName: userName.trim() || 'User',
         status,
+        userImage: uploadedImage || currentMember.userImage,
+        hasCustomImage: !!uploadedImage || currentMember.hasCustomImage,
         autoResponseEnabled: profile.autoResponseEnabled
       });
 
@@ -81,6 +83,12 @@ export default function ProfileModal({
         hasCustomImage: !!uploadedImage || currentMember.hasCustomImage,
         autoResponseEnabled: profile.autoResponseEnabled
       });
+
+      // Force a refresh of the workspace members context
+      if (uploadedImage) {
+        // Small delay to ensure the update has propagated
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
 
       console.log('Profile saved successfully');
 
@@ -115,7 +123,17 @@ export default function ProfileModal({
   const handleGeneratedImage = async (imageUrl: string) => {
     try {
       setIsLoading(true);
+      
+      // Immediately update the uploaded image
       setUploadedImage(imageUrl);
+      
+      // Immediately save the changes to ensure real-time updates
+      if (currentMember) {
+        await updateMember(currentMember.id, {
+          userImage: imageUrl,
+          hasCustomImage: true
+        });
+      }
     } catch (error) {
       console.error('Error setting generated image:', error);
     } finally {
