@@ -712,19 +712,6 @@ export default function MessageList({
     }
   };
 
-  const StateDebug = () => {
-    if (process.env.NODE_ENV === 'development') {
-      return (
-        <div className="fixed top-0 right-0 bg-black/50 text-white p-2 text-xs">
-          <div>isDM: {String(isDM)}</div>
-          <div>autoResponse.isEnabled: {String(autoResponseState.isEnabled)}</div>
-          <div>autoResponse.isResponding: {String(autoResponseState.isResponding)}</div>
-        </div>
-      );
-    }
-    return null;
-  };
-
   // Add effect to handle incoming messages
   useEffect(() => {
     if (!isDM) return;
@@ -754,7 +741,6 @@ export default function MessageList({
 
   return (
     <div className="flex-1 flex h-full">
-      <StateDebug />
       <div className="flex-1 flex flex-col h-full relative">
         <div className="absolute inset-0 bottom-[88px] overflow-hidden">
           <div className="h-full overflow-y-auto">
