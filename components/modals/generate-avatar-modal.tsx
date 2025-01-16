@@ -2,33 +2,32 @@
 
 import { X, Check } from 'lucide-react';
 import { useState } from 'react';
-import PreviewAvatarModal from './preview-avatar-modal';
 
 const styles = [
   'Minimalist',
-  'Artistic',
   'Professional',
+  'Artistic',
   'Cartoon',
   'Abstract',
   'Geometric'
 ];
 
 const colors = [
+  'Monochrome',
   'Blue tones',
   'Earth tones',
   'Vibrant colors',
-  'Monochrome',
   'Pastel colors',
   'Dark theme'
 ];
 
 const subjects = [
+  'Minimal patterns',
   'Abstract shapes',
   'Nature elements',
   'Professional symbols',
   'Tech-inspired',
-  'Cosmic themes',
-  'Minimal patterns'
+  'Cosmic themes'
 ];
 
 interface GenerateAvatarModalProps {
@@ -48,7 +47,6 @@ export default function GenerateAvatarModal({
   const [customDetails, setCustomDetails] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -74,7 +72,6 @@ export default function GenerateAvatarModal({
 
       const data = await response.json();
       setPreviewUrl(data.imageUrl);
-      setIsPreviewOpen(true);
     } catch (error) {
       console.error('Error generating image:', error);
     } finally {
@@ -85,14 +82,8 @@ export default function GenerateAvatarModal({
   const handleConfirm = () => {
     if (previewUrl) {
       onImageGenerated(previewUrl);
-      setIsPreviewOpen(false);
       onClose();
     }
-  };
-
-  const handleClosePreview = () => {
-    setIsPreviewOpen(false);
-    setPreviewUrl(null);
   };
 
   return (
@@ -242,14 +233,6 @@ export default function GenerateAvatarModal({
           </div>
         </div>
       </div>
-
-      {/* Preview Modal */}
-      <PreviewAvatarModal
-        isOpen={isPreviewOpen}
-        imageUrl={previewUrl || ''}
-        onClose={handleClosePreview}
-        onConfirm={handleConfirm}
-      />
     </>
   );
 } 
