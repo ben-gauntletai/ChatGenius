@@ -2,7 +2,7 @@ import { OpenAI } from 'openai';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs';
 import { getContextAndGenerateResponse } from '@/lib/vector-store';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 
 interface PromptVariables {
   query: string;
@@ -12,8 +12,6 @@ interface PromptVariables {
 const createPrompt = (template: string, variables: PromptVariables): string => {
   return template.replace(/{(\w+)}/g, (_, key) => variables[key as keyof PromptVariables] || '');
 };
-
-const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
   try {
@@ -58,8 +56,7 @@ export async function POST(req: Request) {
       context: context
     });
 
-    // Log for debugging
-    console.log('Formatted prompt:', formattedPrompt);
+    // Log members for debugging
     console.log('Sender:', senderMember);
     console.log('Receiver:', receiverMember);
 
@@ -68,6 +65,11 @@ export async function POST(req: Request) {
       apiKey: process.env.OPENAI_API_KEY
     });
 
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('[GENERATE_RESPONSE] Missing OpenAI API key');
+      return new NextResponse('OpenAI API key not configured', { status: 500 });
+    }
+
     console.log('Context:', context)
 
     const response = await openai.chat.completions.create({
@@ -75,15 +77,17 @@ export async function POST(req: Request) {
       messages: [
         {
           role: "system",
-          content: `You are generating an response on behalf of ${receiverMember?.userName || 'a user'}. 
+          content: `You are generating a response on behalf of ${senderMember?.userName || 'a user'}. 
 
-          The following messages show the receiver's writing style:
+          The following messages show the sender's writing style:
 
           ${context}
 
           You must match their exact writing style, including tone, formality, length, and any other patterns in how they communicate. Your response should feel indistinguishable from their natural way of writing.
           
-          You are responding as ${receiverMember?.userName || 'the receiver'} to a message from ${senderMember?.userName || 'the sender'}.`
+          You are responding as ${senderMember?.userName || 'the sender'} to a message from ${receiverMember?.userName || 'the receiver'}.
+          
+          IMPORTANT: Do not include timestamps, usernames, or any metadata in your response. Just provide the message content directly.`
         },
         {
           role: "user",
@@ -96,9 +100,8 @@ export async function POST(req: Request) {
     console.log('Response:', response.choices)
 
     return NextResponse.json({ response: response.choices[0].message.content });
-
   } catch (error) {
-    console.error('[GENERATE_RESPONSE]', error);
+    console.error('[GENERATE_RESPONSE] Error:', error);
     return new NextResponse('Internal Error', { status: 500 });
   }
 } 

@@ -171,7 +171,8 @@ export async function POST(req: Request) {
           console.log('[DIRECT_MESSAGES_POST] Sending auto-response request with body:', {
             prompt: content,
             userId: receiverId,
-            workspaceId
+            workspaceId,
+            receiverId: userId
           });
 
           const autoResponse = await fetch(generateResponseUrl, {
@@ -180,7 +181,8 @@ export async function POST(req: Request) {
             body: JSON.stringify({
               prompt: content,
               userId: receiverId,
-              workspaceId
+              workspaceId,
+              receiverId: userId
             })
           });
           
