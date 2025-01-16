@@ -317,7 +317,7 @@ export default function MessageList({
         throw new Error('Authentication required');
       }
 
-      // Check auto-response status before sending
+      // Only proceed with auto-response check for DMs
       if (isDM && workspaceId && otherUserId) {
         const receiverResponse = await fetch(`/api/workspaces/${workspaceId}/members/${otherUserId}`, {
           headers: {
@@ -327,9 +327,6 @@ export default function MessageList({
         
         if (receiverResponse.ok) {
           const receiverData = await receiverResponse.json();
-          console.log('[DEBUG] Pre-send receiver data:', receiverData);
-          
-          // Only update isEnabled, don't set isResponding when we send a message
           setAutoResponseState(current => ({
             ...current,
             isEnabled: Boolean(receiverData.autoResponseEnabled)
@@ -361,12 +358,6 @@ export default function MessageList({
         fileType: selectedFile?.type
       }
 
-      console.log('[DEBUG] Sending message with data:', messageData);
-      console.log('[DEBUG] isDM:', isDM);
-      console.log('[DEBUG] workspaceId:', workspaceId);
-      console.log('[DEBUG] otherUserId:', otherUserId);
-      console.log('[DEBUG] Current auto-response state:', autoResponseState);
-
       const response = await fetch(isDM ? '/api/direct-messages' : '/api/messages', {
         method: 'POST',
         headers: { 
@@ -379,16 +370,10 @@ export default function MessageList({
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[DEBUG] Error response:', errorText);
-        try {
-          const errorData = JSON.parse(errorText);
-          throw new Error(errorData?.message || 'Failed to send message');
-        } catch (e) {
-          throw new Error('Failed to send message');
-        }
+        throw new Error('Failed to send message');
       }
 
       const responseData = await response.json();
-      console.log('[DEBUG] Message sent successfully:', responseData);
 
       setNewMessage('')
       setSelectedFile(null)
@@ -396,8 +381,8 @@ export default function MessageList({
         fileInputRef.current.value = ''
       }
 
-      // After successful message send, set loading state if auto-response is enabled
-      if (responseData && responseData.id) {
+      // For DMs only: Show loading dots if auto-response is enabled
+      if (isDM && responseData && responseData.id) {
         lastMessageRef.current = responseData.id;
         if (autoResponseState.isEnabled) {
           setAutoResponseState(current => ({
@@ -681,8 +666,6 @@ export default function MessageList({
         ...(isDM ? { receiverId: otherUserId } : { channelId })
       };
 
-      console.log('Sending message with data:', messageData);
-
       const submitResponse = await fetch(isDM ? '/api/direct-messages' : '/api/messages', {
         method: 'POST',
         headers: { 
@@ -699,10 +682,31 @@ export default function MessageList({
         console.error('Error response:', errorData);
         throw new Error(errorData?.message || 'Failed to send generated response');
       }
+
+      // For DMs: Show loading dots if auto-response is enabled
+      if (isDM) {
+        const responseData = await submitResponse.json();
+        if (responseData && responseData.id) {
+          lastMessageRef.current = responseData.id;
+          if (autoResponseState.isEnabled) {
+            setAutoResponseState(current => ({
+              ...current,
+              isResponding: true
+            }));
+          }
+        }
+      }
       
     } catch (error) {
       console.error('Error in generate flow:', error);
       setNewMessage('Failed to generate and send response. Please try again.');
+      // Clear loading state if there's an error
+      if (isDM) {
+        setAutoResponseState(current => ({
+          ...current,
+          isResponding: false
+        }));
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -721,56 +725,78 @@ export default function MessageList({
     return null;
   };
 
+  // Add effect to handle incoming messages
+  useEffect(() => {
+    if (!isDM) return;
+
+    const handleNewMessage = (message: any) => {
+      // If we receive a message from the other user, clear the loading state
+      if (message.userId === otherUserId) {
+        setAutoResponseState(current => ({
+          ...current,
+          isResponding: false
+        }));
+        lastMessageRef.current = null;
+      }
+    };
+
+    // Subscribe to new messages
+    if (channelId) {
+      const channel = pusherClient.subscribe(channelId);
+      channel.bind('new-message', handleNewMessage);
+
+      return () => {
+        channel.unbind('new-message', handleNewMessage);
+        pusherClient.unsubscribe(channelId);
+      };
+    }
+  }, [isDM, channelId, otherUserId]);
+
   return (
     <div className="flex-1 flex h-full">
       <StateDebug />
       <div className="flex-1 flex flex-col h-full relative">
-        <div className="absolute inset-0 bottom-[88px]">
-          <div className="h-full overflow-y-auto flex flex-col justify-end">
-            <div className="flex flex-col">
-              {/* Debug logs */}
-              {(() => {
-                console.log('[DEBUG] Rendering - autoResponseState:', autoResponseState);
-                console.log('[DEBUG] Rendering - isDM:', isDM);
-                console.log('[DEBUG] Rendering - otherUserInfo:', otherUserInfo);
-                return null;
-              })()}
-              {messages.map((message) => (
-                <Message
-                  key={message.id}
-                  {...message}
-                  onDelete={handleDelete}
-                  onEdit={handleEdit}
-                  onReact={handleReact}
-                  onRemoveReaction={handleRemoveReaction}
-                  onThreadClick={isDM ? undefined : () => handleThreadClick(message)}
-                  isThreadReply={false}
-                  isDM={isDM}
-                />
-              ))}
-              {isDM && autoResponseState.isEnabled && autoResponseState.isResponding && (
-                <div className="flex items-center gap-2 p-4 bg-[#f9fafb]">
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
-                    {otherUserInfo.userImage ? (
-                      <img 
-                        src={otherUserInfo.userImage} 
-                        alt={otherUserInfo.userName || 'User'} 
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-purple-500 text-white text-sm">
-                        {otherUserInfo.userName?.[0]?.toUpperCase() || '?'}
-                      </div>
-                    )}
+        <div className="absolute inset-0 bottom-[88px] overflow-hidden">
+          <div className="h-full overflow-y-auto">
+            <div className="flex flex-col justify-end min-h-full">
+              <div className="flex flex-col space-y-4">
+                {messages.map((message) => (
+                  <Message
+                    key={message.id}
+                    {...message}
+                    onDelete={handleDelete}
+                    onEdit={handleEdit}
+                    onReact={handleReact}
+                    onRemoveReaction={handleRemoveReaction}
+                    onThreadClick={isDM ? undefined : () => handleThreadClick(message)}
+                    isThreadReply={false}
+                    isDM={isDM}
+                  />
+                ))}
+                {isDM && autoResponseState.isEnabled && autoResponseState.isResponding && (
+                  <div className="flex items-center gap-2 p-4 bg-[#f9fafb]">
+                    <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex-shrink-0">
+                      {otherUserInfo.userImage ? (
+                        <img 
+                          src={otherUserInfo.userImage} 
+                          alt={otherUserInfo.userName || 'User'} 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-purple-500 text-white text-sm">
+                          {otherUserInfo.userName?.[0]?.toUpperCase() || '?'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-3">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-3">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
-                </div>
-              )}
-              <div ref={bottomRef} />
+                )}
+                <div ref={bottomRef} />
+              </div>
             </div>
           </div>
         </div>
