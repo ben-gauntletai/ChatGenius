@@ -16,6 +16,8 @@ interface Member {
   hasCustomImage: boolean;
   workspaceId: string;
   autoResponseEnabled: boolean;
+  voiceResponseEnabled: boolean;
+  selectedVoiceId: string | null;
 }
 
 interface WorkspaceMembersContextType {

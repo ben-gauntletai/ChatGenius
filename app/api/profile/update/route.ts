@@ -8,6 +8,8 @@ import type { WorkspaceMember } from '@prisma/client';
 // Temporary type to help TypeScript recognize the autoResponseEnabled field
 type ExtendedWorkspaceMember = WorkspaceMember & {
   autoResponseEnabled: boolean;
+  voiceResponseEnabled: boolean;
+  selectedVoiceId: string | null;
 };
 
 export async function PATCH(req: Request) {
@@ -17,8 +19,23 @@ export async function PATCH(req: Request) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    const { userName, status, userImage, autoResponseEnabled } = await req.json();
-    console.log('Received update request:', { userName, status, userImage, autoResponseEnabled });
+    const { 
+      userName, 
+      status, 
+      userImage, 
+      autoResponseEnabled,
+      voiceResponseEnabled,
+      selectedVoiceId 
+    } = await req.json();
+    
+    console.log('Received update request:', { 
+      userName, 
+      status, 
+      userImage, 
+      autoResponseEnabled,
+      voiceResponseEnabled,
+      selectedVoiceId 
+    });
 
     // Find all workspace memberships for the user
     const members = (await prisma.workspaceMember.findMany({
@@ -27,7 +44,9 @@ export async function PATCH(req: Request) {
     
     console.log('Current member state:', members.map(m => ({ 
       id: m.id, 
-      autoResponseEnabled: m.autoResponseEnabled 
+      autoResponseEnabled: m.autoResponseEnabled,
+      voiceResponseEnabled: m.voiceResponseEnabled,
+      selectedVoiceId: m.selectedVoiceId
     })));
 
     // Update all memberships
@@ -53,7 +72,14 @@ export async function PATCH(req: Request) {
 
       if (autoResponseEnabled !== undefined) {
         updateData.autoResponseEnabled = autoResponseEnabled;
-        console.log('Updating autoResponseEnabled for member', member.id, 'to:', autoResponseEnabled);
+      }
+
+      if (voiceResponseEnabled !== undefined) {
+        updateData.voiceResponseEnabled = voiceResponseEnabled;
+      }
+
+      if (selectedVoiceId !== undefined) {
+        updateData.selectedVoiceId = selectedVoiceId;
       }
 
       const updatedMember = (await prisma.workspaceMember.update({
@@ -63,7 +89,9 @@ export async function PATCH(req: Request) {
 
       console.log('Member updated:', { 
         id: updatedMember.id, 
-        autoResponseEnabled: updatedMember.autoResponseEnabled 
+        autoResponseEnabled: updatedMember.autoResponseEnabled,
+        voiceResponseEnabled: updatedMember.voiceResponseEnabled,
+        selectedVoiceId: updatedMember.selectedVoiceId
       });
 
       // Broadcast update to workspace members
@@ -79,7 +107,9 @@ export async function PATCH(req: Request) {
           hasCustomName: updatedMember.hasCustomName,
           hasCustomImage: updatedMember.hasCustomImage,
           workspaceId: updatedMember.workspaceId,
-          autoResponseEnabled: updatedMember.autoResponseEnabled
+          autoResponseEnabled: updatedMember.autoResponseEnabled,
+          voiceResponseEnabled: updatedMember.voiceResponseEnabled,
+          selectedVoiceId: updatedMember.selectedVoiceId
         }
       );
 
@@ -89,7 +119,9 @@ export async function PATCH(req: Request) {
     const updatedMembers = await Promise.all(updatePromises);
     console.log('All members updated:', updatedMembers.map(m => ({ 
       id: m.id, 
-      autoResponseEnabled: m.autoResponseEnabled 
+      autoResponseEnabled: m.autoResponseEnabled,
+      voiceResponseEnabled: m.voiceResponseEnabled,
+      selectedVoiceId: m.selectedVoiceId
     })));
 
     return NextResponse.json(updatedMembers[0]);

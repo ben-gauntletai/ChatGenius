@@ -10,7 +10,16 @@ interface Profile {
   name: string;
   image: string | null;
   autoResponseEnabled: boolean;
+  voiceResponseEnabled: boolean;
+  selectedVoiceId: string | null;
 }
+
+const AVAILABLE_VOICES = [
+  { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda' },
+  { id: 'flq6f7yk4E4fJM5XTYuZ', name: 'Michael' },
+  { id: 'zcAOhNBS3c14rBihAFp1', name: 'Giovanni' },
+  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' }
+];
 
 export default function ProfileModal({
   isOpen,
@@ -18,7 +27,9 @@ export default function ProfileModal({
   initialProfile = {
     name: '',
     image: null,
-    autoResponseEnabled: false
+    autoResponseEnabled: false,
+    voiceResponseEnabled: false,
+    selectedVoiceId: 'XrExE9yKIg1WjnnlVkGX'  // Default to Matilda
   },
   onUpdate
 }: {
@@ -28,19 +39,24 @@ export default function ProfileModal({
   onUpdate?: (profile: Profile) => void;
 }) {
   const { updateMember, currentMember } = useWorkspaceMembers();
+  const [isTestingVoice, setIsTestingVoice] = useState(false);
   // Initialize state from currentMember if available, otherwise use initialProfile
   const [profile, setProfile] = useState<Profile>(() => {
     if (currentMember) {
       return {
         name: currentMember.userName,
         image: currentMember.userImage,
-        autoResponseEnabled: Boolean(currentMember.autoResponseEnabled)
+        autoResponseEnabled: Boolean(currentMember.autoResponseEnabled),
+        voiceResponseEnabled: Boolean(currentMember.voiceResponseEnabled),
+        selectedVoiceId: currentMember.selectedVoiceId || 'XrExE9yKIg1WjnnlVkGX'
       };
     }
     return {
       name: initialProfile.name || '',
       image: initialProfile.image || null,
-      autoResponseEnabled: Boolean(initialProfile.autoResponseEnabled)
+      autoResponseEnabled: Boolean(initialProfile.autoResponseEnabled),
+      voiceResponseEnabled: Boolean(initialProfile.voiceResponseEnabled),
+      selectedVoiceId: initialProfile.selectedVoiceId || 'XrExE9yKIg1WjnnlVkGX'
     };
   });
   const [userName, setUserName] = useState(currentMember?.userName || initialProfile.name || '');
@@ -72,7 +88,9 @@ export default function ProfileModal({
         status,
         userImage: uploadedImage || currentMember.userImage,
         hasCustomImage: !!uploadedImage || currentMember.hasCustomImage,
-        autoResponseEnabled: profile.autoResponseEnabled
+        autoResponseEnabled: profile.autoResponseEnabled,
+        voiceResponseEnabled: profile.voiceResponseEnabled,
+        selectedVoiceId: profile.selectedVoiceId
       });
 
       // Save all changes
@@ -81,7 +99,9 @@ export default function ProfileModal({
         status,
         userImage: uploadedImage || currentMember.userImage,
         hasCustomImage: !!uploadedImage || currentMember.hasCustomImage,
-        autoResponseEnabled: profile.autoResponseEnabled
+        autoResponseEnabled: profile.autoResponseEnabled,
+        voiceResponseEnabled: profile.voiceResponseEnabled,
+        selectedVoiceId: profile.selectedVoiceId
       });
 
       // Force a refresh of the workspace members context
@@ -97,7 +117,9 @@ export default function ProfileModal({
         onUpdate({
           name: userName.trim() || 'User',
           image: uploadedImage || currentMember.userImage,
-          autoResponseEnabled: profile.autoResponseEnabled
+          autoResponseEnabled: profile.autoResponseEnabled,
+          voiceResponseEnabled: profile.voiceResponseEnabled,
+          selectedVoiceId: profile.selectedVoiceId
         });
       }
 
@@ -138,6 +160,37 @@ export default function ProfileModal({
       console.error('Error setting generated image:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const testVoice = async (voiceId: string) => {
+    try {
+      setIsTestingVoice(true);
+      console.log('Testing voice with ID:', voiceId);
+      const response = await fetch('/api/generate-voice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text: 'Hello, this is a test of my voice.',
+          voiceId: voiceId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate voice test');
+      }
+
+      const data = await response.json();
+      
+      // Create and play audio
+      const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
+      await audio.play();
+    } catch (error) {
+      console.error('Error testing voice:', error);
+    } finally {
+      setIsTestingVoice(false);
     }
   };
 
@@ -303,7 +356,9 @@ export default function ProfileModal({
                   });
                   setProfile(prev => ({ 
                     ...prev, 
-                    autoResponseEnabled: newValue
+                    autoResponseEnabled: newValue,
+                    // Disable voice response if auto-response is disabled
+                    voiceResponseEnabled: newValue ? prev.voiceResponseEnabled : false
                   }));
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#3F0E40] ${
@@ -318,6 +373,68 @@ export default function ProfileModal({
                 />
               </button>
             </div>
+
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Enable voice responses</label>
+                <span className="text-xs text-gray-500">(requires auto-respond)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!profile.autoResponseEnabled) return;
+                  setProfile(prev => ({ 
+                    ...prev, 
+                    voiceResponseEnabled: !prev.voiceResponseEnabled
+                  }));
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#3F0E40] ${
+                  profile.voiceResponseEnabled && profile.autoResponseEnabled ? 'bg-[#3F0E40] shadow-lg' : 'bg-gray-300 hover:bg-gray-400'
+                } ${!profile.autoResponseEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={isLoading || !profile.autoResponseEnabled}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform ${
+                    profile.voiceResponseEnabled && profile.autoResponseEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {profile.voiceResponseEnabled && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select Voice
+                </label>
+                <div className="space-y-2">
+                  <select
+                    value={profile.selectedVoiceId || ''}
+                    onChange={(e) => setProfile(prev => ({ 
+                      ...prev, 
+                      selectedVoiceId: e.target.value 
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#3F0E40] focus:border-transparent text-gray-700"
+                    disabled={isLoading || isTestingVoice}
+                  >
+                    {AVAILABLE_VOICES.map(voice => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => testVoice(profile.selectedVoiceId!)}
+                    disabled={isTestingVoice || isLoading}
+                    className={`w-full px-3 py-2 text-sm text-white bg-[#3F0E40] rounded hover:bg-opacity-90 transition ${
+                      (isTestingVoice || isLoading) ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {isTestingVoice ? 'Testing...' : 'Test Selected Voice'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer */}

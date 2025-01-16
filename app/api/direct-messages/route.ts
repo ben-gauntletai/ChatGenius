@@ -8,6 +8,7 @@ import type { WorkspaceMember } from '@prisma/client'
 // Temporary type to help TypeScript recognize the autoResponseEnabled field
 type ExtendedWorkspaceMember = WorkspaceMember & {
   autoResponseEnabled: boolean;
+  voiceResponseEnabled: boolean;
 };
 
 export async function POST(req: Request) {
@@ -147,7 +148,8 @@ export async function POST(req: Request) {
           console.log('[DIRECT_MESSAGES_POST] Auto-response flow starting:', {
             receiverId,
             workspaceId,
-            messageContent: content
+            messageContent: content,
+            voiceEnabled: receiverMember.voiceResponseEnabled
           });
           
           // Get base URL from request headers or environment
@@ -156,17 +158,6 @@ export async function POST(req: Request) {
           const baseUrl = `${protocol}://${host}`;
           const generateResponseUrl = `${baseUrl}/api/generate-response`;
           
-          console.log('[DIRECT_MESSAGES_POST] Request details:', {
-            protocol,
-            host,
-            baseUrl,
-            generateResponseUrl,
-            headers: {
-              'x-forwarded-proto': req.headers.get('x-forwarded-proto'),
-              'host': req.headers.get('host')
-            }
-          });
-
           // Generate auto-response
           console.log('[DIRECT_MESSAGES_POST] Sending auto-response request with body:', {
             prompt: content,
@@ -185,13 +176,7 @@ export async function POST(req: Request) {
               receiverId: userId
             })
           });
-          
-          console.log('[DIRECT_MESSAGES_POST] Auto-response initial response:', {
-            status: autoResponse.status,
-            statusText: autoResponse.statusText,
-            headers: Object.fromEntries(autoResponse.headers.entries())
-          });
-          
+
           if (!autoResponse.ok) {
             const errorText = await autoResponse.text();
             console.error('[DIRECT_MESSAGES_POST] Auto-response failed:', {
@@ -211,15 +196,40 @@ export async function POST(req: Request) {
             return;
           }
 
+          // Generate voice response if enabled
+          let voiceUrl = null;
+          if (receiverMember.voiceResponseEnabled) {
+            try {
+              const voiceResponse = await fetch(`${baseUrl}/api/generate-voice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  text: responseData.response
+                })
+              });
+
+              if (voiceResponse.ok) {
+                const voiceData = await voiceResponse.json();
+                // Create a data URL for the audio
+                voiceUrl = `data:audio/mp3;base64,${voiceData.audio}`;
+              } else {
+                console.error('[DIRECT_MESSAGES_POST] Voice generation failed:', await voiceResponse.text());
+              }
+            } catch (error) {
+              console.error('[DIRECT_MESSAGES_POST] Voice generation error:', error);
+            }
+          }
+
           console.log('[DIRECT_MESSAGES_POST] Creating auto-response message with:', {
             content: responseData.response,
             workspaceId,
             senderId: receiverId,
             receiverId: userId,
             senderName: receiver.userName,
-            receiverName: sender.userName
+            receiverName: sender.userName,
+            voiceUrl
           });
-          
+
           // Create auto-response message
           const autoResponseMessage = await prisma.directMessage.create({
             data: {
@@ -230,7 +240,10 @@ export async function POST(req: Request) {
               senderImage: receiver.userImage?.startsWith('/api/files/') ? receiver.userImage : null,
               receiverId: userId,
               receiverName: sender.userName || 'User',
-              receiverImage: sender.userImage?.startsWith('/api/files/') ? receiver.userImage : null,
+              receiverImage: sender.userImage?.startsWith('/api/files/') ? sender.userImage : null,
+              fileUrl: voiceUrl,
+              fileType: voiceUrl ? 'audio/mp3' : null,
+              fileName: voiceUrl ? 'voice-response.mp3' : null
             },
             include: {
               reactions: true
@@ -239,7 +252,8 @@ export async function POST(req: Request) {
 
           console.log('[DIRECT_MESSAGES_POST] Auto-response message created:', {
             messageId: autoResponseMessage.id,
-            content: autoResponseMessage.content
+            content: autoResponseMessage.content,
+            voiceUrl: autoResponseMessage.fileUrl
           });
 
           // Format and broadcast auto-response
@@ -251,9 +265,9 @@ export async function POST(req: Request) {
             userName: autoResponseMessage.senderName,
             userImage: autoResponseMessage.senderImage,
             reactions: autoResponseMessage.reactions,
-            fileUrl: null,
-            fileName: null,
-            fileType: null,
+            fileUrl: autoResponseMessage.fileUrl,
+            fileName: autoResponseMessage.fileName,
+            fileType: autoResponseMessage.fileType,
             isEdited: false
           };
 
