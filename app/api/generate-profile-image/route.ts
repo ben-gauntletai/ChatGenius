@@ -7,18 +7,13 @@ const openai = new OpenAI({
 
 export async function POST(req: Request) {
   try {
-    const { style, color, subject, customDetails } = await req.json();
+    const { style, color, subject } = await req.json();
 
-    let prompt = `Generate a professional profile picture with the following characteristics:
+    const prompt = `Generate a professional profile picture with the following characteristics:
       Style: ${style}
       Color scheme: ${color}
       Subject matter: ${subject}
-      Make it suitable for a professional profile picture, centered, with good composition`;
-
-    // Add custom details if provided
-    if (customDetails) {
-      prompt += `\nAdditional requirements: ${customDetails}`;
-    }
+      Make it suitable for a professional profile picture, centered, with good composition and high quality details.`;
 
     const response = await openai.images.generate({
       model: "dall-e-3",

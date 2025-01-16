@@ -2,6 +2,7 @@
 
 import { X, Check } from 'lucide-react';
 import { useState } from 'react';
+import PreviewAvatarModal from './preview-avatar-modal';
 
 const styles = [
   'Minimalist',
@@ -44,9 +45,9 @@ export default function GenerateAvatarModal({
   const [selectedStyle, setSelectedStyle] = useState(styles[0]);
   const [selectedColor, setSelectedColor] = useState(colors[0]);
   const [selectedSubject, setSelectedSubject] = useState(subjects[0]);
-  const [customDetails, setCustomDetails] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -61,8 +62,7 @@ export default function GenerateAvatarModal({
         body: JSON.stringify({
           style: selectedStyle,
           color: selectedColor,
-          subject: selectedSubject,
-          customDetails: customDetails.trim(),
+          subject: selectedSubject
         }),
       });
 
@@ -72,6 +72,7 @@ export default function GenerateAvatarModal({
 
       const data = await response.json();
       setPreviewUrl(data.imageUrl);
+      setIsPreviewOpen(true);
     } catch (error) {
       console.error('Error generating image:', error);
     } finally {
@@ -82,8 +83,14 @@ export default function GenerateAvatarModal({
   const handleConfirm = () => {
     if (previewUrl) {
       onImageGenerated(previewUrl);
+      setIsPreviewOpen(false);
       onClose();
     }
+  };
+
+  const handleClosePreview = () => {
+    setIsPreviewOpen(false);
+    setPreviewUrl(null);
   };
 
   return (
@@ -195,26 +202,6 @@ export default function GenerateAvatarModal({
                 ))}
               </div>
             </div>
-
-            {/* Custom Details Section */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Additional Details (Optional)
-              </label>
-              <div className="relative">
-                <textarea
-                  value={customDetails}
-                  onChange={(e) => setCustomDetails(e.target.value)}
-                  placeholder="Add specific elements or preferences you'd like to include (e.g., 'include mountains in background' or 'make it futuristic')"
-                  className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 text-xs sm:text-sm text-gray-700 placeholder-gray-400
-                    focus:outline-none focus:border-[#3F0E40] focus:ring-1 focus:ring-[#3F0E40] transition-colors
-                    resize-none h-16 sm:h-20"
-                />
-                <div className="absolute bottom-2 right-2 text-xs text-gray-400">
-                  Optional
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Action Buttons - Fixed at Bottom */}
@@ -233,6 +220,14 @@ export default function GenerateAvatarModal({
           </div>
         </div>
       </div>
+
+      {/* Preview Modal */}
+      <PreviewAvatarModal
+        isOpen={isPreviewOpen}
+        imageUrl={previewUrl || ''}
+        onClose={handleClosePreview}
+        onConfirm={handleConfirm}
+      />
     </>
   );
 } 
