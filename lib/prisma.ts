@@ -14,8 +14,13 @@ const prismaClient = new PrismaClient({
   log: ['error', 'warn']
 })
 
-// Add middleware for connection handling
+// Add middleware for regular queries
 prismaClient.$use(async (params, next) => {
+  // Skip file operations - they have their own middleware
+  if (params.model === 'FileUpload') {
+    return next(params)
+  }
+
   const MAX_RETRIES = 3
   const INITIAL_RETRY_DELAY = 100 // 100ms
 
@@ -26,6 +31,37 @@ prismaClient.$use(async (params, next) => {
         next(params),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Query timeout')), 5000) // 5s timeout
+        )
+      ])
+    } catch (error: any) {
+      attempt++
+      if (attempt === MAX_RETRIES || !error.message?.includes('connection')) {
+        throw error
+      }
+      // Exponential backoff
+      await new Promise(resolve => 
+        setTimeout(resolve, INITIAL_RETRY_DELAY * Math.pow(2, attempt))
+      )
+    }
+  }
+})
+
+// Add separate middleware for file operations with longer timeout
+prismaClient.$use(async (params, next) => {
+  if (params.model !== 'FileUpload') {
+    return next(params)
+  }
+
+  const MAX_RETRIES = 3
+  const INITIAL_RETRY_DELAY = 200 // 200ms for files
+
+  let attempt = 0
+  while (attempt < MAX_RETRIES) {
+    try {
+      return await Promise.race([
+        next(params),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('File operation timeout')), 30000) // 30s timeout for files
         )
       ])
     } catch (error: any) {
