@@ -13,17 +13,13 @@ export async function GET(
       return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    const channels = await prisma.$transaction(async (tx) => {
-      return tx.channel.findMany({
-        where: {
-          workspaceId: params.workspaceId
-        },
-        orderBy: {
-          createdAt: 'asc'
-        }
-      })
-    }, {
-      timeout: 15000 // 15 second timeout for the transaction
+    const channels = await prisma.channel.findMany({
+      where: {
+        workspaceId: params.workspaceId
+      },
+      orderBy: {
+        createdAt: 'asc'
+      }
     })
 
     return NextResponse.json(channels)
