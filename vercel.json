@@ -1,16 +1,16 @@
 {
     "functions": {
-        "api/generate.js": {
-        "maxDuration": 60
+        "app/api/generate/route.js": {
+            "maxDuration": 60
         },
-        "api/generate-voice/**": {
-        "maxDuration": 60
+        "app/api/generate-voice/route.js": {
+            "maxDuration": 60
         },
-        "api/profile/update/**": {
-        "maxDuration": 60
+        "app/api/profile/update/route.js": {
+            "maxDuration": 60
         },
-        "api/generate-image/**": {
-        "maxDuration": 60
+        "app/api/generate-image/route.js": {
+            "maxDuration": 60
         }
     },
     "headers": [
@@ -23,5 +23,8 @@
                 }
             ]
         }
-    ]
+    ],
+    "regions": ["iad1"],
+    "cleanUrls": true,
+    "trailingSlash": false
 }
