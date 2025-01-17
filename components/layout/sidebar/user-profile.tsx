@@ -92,7 +92,9 @@ export default function UserProfile({ workspaceId, onSignOut }: UserProfileProps
           initialProfile={{
             name: currentMember.userName || '',
             image: currentMember.userImage || null,
-            autoResponseEnabled: currentMember.autoResponseEnabled || false
+            autoResponseEnabled: currentMember.autoResponseEnabled || false,
+            voiceResponseEnabled: currentMember.voiceResponseEnabled || false,
+            selectedVoiceId: currentMember.selectedVoiceId || null
           }}
         />
       )}

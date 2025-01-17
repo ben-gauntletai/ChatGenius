@@ -44,7 +44,9 @@ export default function WorkspaceLayout({
           initialProfile={{
             name: member.userName || '',
             image: member.userImage || null,
-            autoResponseEnabled: member.autoResponseEnabled || false
+            autoResponseEnabled: member.autoResponseEnabled || false,
+            voiceResponseEnabled: member.voiceResponseEnabled || false,
+            selectedVoiceId: member.selectedVoiceId || null
           }}
         />
       )}
