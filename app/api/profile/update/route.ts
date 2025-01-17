@@ -3,14 +3,6 @@ import { auth } from '@clerk/nextjs';
 import { prisma } from '@/lib/prisma';
 import { pusherServer } from '@/lib/pusher';
 import { EVENTS } from '@/lib/pusher-events';
-import type { WorkspaceMember } from '@prisma/client';
-
-// Temporary type to help TypeScript recognize the autoResponseEnabled field
-type ExtendedWorkspaceMember = WorkspaceMember & {
-  autoResponseEnabled: boolean;
-  voiceResponseEnabled: boolean;
-  selectedVoiceId: string | null;
-};
 
 export async function PATCH(req: Request) {
   try {
@@ -25,108 +17,58 @@ export async function PATCH(req: Request) {
       userImage, 
       autoResponseEnabled,
       voiceResponseEnabled,
-      selectedVoiceId 
+      selectedVoiceId
     } = await req.json();
-    
-    console.log('Received update request:', { 
-      userName, 
-      status, 
-      userImage, 
-      autoResponseEnabled,
-      voiceResponseEnabled,
-      selectedVoiceId 
-    });
 
     // Find all workspace memberships for the user
-    const members = (await prisma.workspaceMember.findMany({
+    const members = await prisma.workspaceMember.findMany({
       where: { userId }
-    })) as ExtendedWorkspaceMember[];
-    
-    console.log('Current member state:', members.map(m => ({ 
-      id: m.id, 
-      autoResponseEnabled: m.autoResponseEnabled,
-      voiceResponseEnabled: m.voiceResponseEnabled,
-      selectedVoiceId: m.selectedVoiceId
-    })));
+    });
 
-    // Update all memberships
-    const updatePromises = members.map(async (member: ExtendedWorkspaceMember) => {
-      // Only update the fields that are provided
-      const updateData: any = {
-        isFirstLogin: false // Always set isFirstLogin to false on profile update
-      };
-      
-      if (status !== undefined) {
-        updateData.status = status;
-      }
-      
-      if (userName !== undefined) {
-        updateData.userName = userName || 'User';
-        updateData.hasCustomName = !!userName;
-      }
-      
-      if (userImage !== undefined) {
-        updateData.userImage = userImage || member.userImage;
-        updateData.hasCustomImage = !!userImage;
-      }
-
-      if (autoResponseEnabled !== undefined) {
-        updateData.autoResponseEnabled = autoResponseEnabled;
-      }
-
-      if (voiceResponseEnabled !== undefined) {
-        updateData.voiceResponseEnabled = voiceResponseEnabled;
-      }
-
-      if (selectedVoiceId !== undefined) {
-        updateData.selectedVoiceId = selectedVoiceId;
-      }
-
-      const updatedMember = (await prisma.workspaceMember.update({
+    // Update all workspace memberships
+    const updatePromises = members.map(member => 
+      prisma.workspaceMember.update({
         where: { id: member.id },
-        data: updateData
-      })) as ExtendedWorkspaceMember;
+        data: {
+          userName: userName || member.userName,
+          userImage: userImage || member.userImage,
+          hasCustomName: Boolean(userName),
+          hasCustomImage: Boolean(userImage),
+          status: status || member.status,
+          autoResponseEnabled: autoResponseEnabled ?? member.autoResponseEnabled,
+          voiceResponseEnabled: voiceResponseEnabled ?? member.voiceResponseEnabled,
+          selectedVoiceId: selectedVoiceId ?? member.selectedVoiceId,
+          isFirstLogin: false
+        }
+      })
+    );
 
-      console.log('Member updated:', { 
-        id: updatedMember.id, 
-        autoResponseEnabled: updatedMember.autoResponseEnabled,
-        voiceResponseEnabled: updatedMember.voiceResponseEnabled,
-        selectedVoiceId: updatedMember.selectedVoiceId
-      });
+    const updatedMembers = await Promise.all(updatePromises);
 
-      // Broadcast update to workspace members
+    // Notify all channels in each workspace about the member update
+    for (const member of updatedMembers) {
       await pusherServer.trigger(
         `workspace-${member.workspaceId}`,
         EVENTS.MEMBER_UPDATE,
         {
-          id: updatedMember.id,
-          userId: updatedMember.userId,
-          userName: updatedMember.userName,
-          userImage: updatedMember.userImage,
-          status: updatedMember.status,
-          hasCustomName: updatedMember.hasCustomName,
-          hasCustomImage: updatedMember.hasCustomImage,
-          workspaceId: updatedMember.workspaceId,
-          autoResponseEnabled: updatedMember.autoResponseEnabled,
-          voiceResponseEnabled: updatedMember.voiceResponseEnabled,
-          selectedVoiceId: updatedMember.selectedVoiceId
+          memberId: member.id,
+          updates: {
+            userName: member.userName,
+            userImage: member.userImage,
+            status: member.status,
+            hasCustomName: member.hasCustomName,
+            hasCustomImage: member.hasCustomImage,
+            autoResponseEnabled: member.autoResponseEnabled,
+            voiceResponseEnabled: member.voiceResponseEnabled,
+            selectedVoiceId: member.selectedVoiceId
+          }
         }
       );
-
-      return updatedMember;
-    });
-
-    const updatedMembers = await Promise.all(updatePromises);
-    console.log('All members updated:', updatedMembers.map(m => ({ 
-      id: m.id, 
-      autoResponseEnabled: m.autoResponseEnabled,
-      voiceResponseEnabled: m.voiceResponseEnabled,
-      selectedVoiceId: m.selectedVoiceId
-    })));
+    }
 
     return NextResponse.json(updatedMembers[0]);
   } catch (error) {
-    console.error('Error updating profile:', error);
+    console.error('[PROFILE_UPDATE]', error);
     return new NextResponse('Internal Error', { status: 500 });
   }
 } 

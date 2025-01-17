@@ -7,15 +7,17 @@ export const EVENTS = {
 } as const;
 
 export interface MemberUpdateEvent {
-  id: string;
-  userId: string;
-  userName: string;
-  userImage: string | null;
-  status: string;
-  hasCustomName: boolean;
-  hasCustomImage: boolean;
-  workspaceId: string;
-  autoResponseEnabled: boolean;
+  memberId: string;
+  updates: {
+    userName: string;
+    userImage: string | null;
+    status: string;
+    hasCustomName: boolean;
+    hasCustomImage: boolean;
+    autoResponseEnabled: boolean;
+    voiceResponseEnabled: boolean;
+    selectedVoiceId: string | null;
+  }
 }
 
 export interface ErrorEvent {

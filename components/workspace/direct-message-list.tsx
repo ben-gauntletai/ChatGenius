@@ -14,8 +14,7 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
   const [isExpanded, setIsExpanded] = useState(true);
 
   const getDisplayName = (member: any) => {
-    const name = member.hasCustomName ? member.userName : 'User';
-    return member.userId === currentUserId ? `${name} (Me)` : name;
+    return member.userId === currentUserId ? `${member.userName} (Me)` : member.userName;
   };
 
   return (
@@ -44,7 +43,7 @@ export default function DirectMessageList({ workspaceId }: { workspaceId: string
               >
                 <div className="relative">
                   <div className="w-8 h-8 relative rounded-sm overflow-hidden">
-                    {member.hasCustomImage && member.userImage ? (
+                    {member.userImage ? (
                       <img
                         src={member.userImage}
                         alt={getDisplayName(member)}

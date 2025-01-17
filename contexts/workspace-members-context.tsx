@@ -44,7 +44,6 @@ export function WorkspaceMembersProvider({
   const [currentMember, setCurrentMember] = useState<Member | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
 
   const refetchMembers = async () => {
     try {
@@ -53,24 +52,15 @@ export function WorkspaceMembersProvider({
       if (!response.ok) throw new Error('Failed to fetch members');
       
       const data = await response.json();
-      console.log('Fetched members data:', data.map((m: Member) => ({
-        id: m.id,
-        userName: m.userName,
-        autoResponseEnabled: m.autoResponseEnabled
-      })));
+      setMembers(data);
       
-      // Only update state if we're not in the middle of a save operation
-      if (!isSaving) {
-        setMembers(data);
-        
-        if (userId) {
-          const member = data.find((m: Member) => m.userId === userId);
-          setCurrentMember(member || null);
-        }
+      const current = data.find((member: Member) => member.userId === userId);
+      if (current) {
+        setCurrentMember(current);
       }
-    } catch (error) {
-      console.error('Failed to fetch members:', error);
-      setError(error instanceof Error ? error : new Error('Failed to fetch members'));
+    } catch (err) {
+      console.error('Failed to fetch members:', err);
+      setError(err as Error);
     } finally {
       setIsLoading(false);
     }
@@ -78,137 +68,73 @@ export function WorkspaceMembersProvider({
 
   const updateMember = async (memberId: string, updates: Partial<Member>) => {
     try {
-      setIsSaving(true);
-      console.log('Starting member update:', { memberId, updates });
-      
-      // Optimistic update
-      setMembers(current => {
-        const newMembers = current.map(member =>
-          member.id === memberId
-            ? { ...member, ...updates }
-            : member
-        );
-        console.log('Updated members state:', newMembers.map(m => ({
-          id: m.id,
-          autoResponseEnabled: m.autoResponseEnabled
-        })));
-        return newMembers;
-      });
-
-      if (currentMember?.id === memberId) {
-        setCurrentMember(current => {
-          const newMember = current ? { ...current, ...updates } : null;
-          console.log('Updated current member:', newMember);
-          return newMember;
-        });
-      }
-
-      // API call
       const response = await fetch('/api/profile/update', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(updates),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to update member');
-      }
+      if (!response.ok) throw new Error('Failed to update member');
 
       const updatedMember = await response.json();
-      console.log('Server response:', updatedMember);
+      
+      setMembers(prev => prev.map(member => 
+        member.id === memberId ? { ...member, ...updatedMember } : member
+      ));
 
-      // Update state with server response
-      setMembers(current =>
-        current.map(member =>
-          member.id === memberId
-            ? { ...member, ...updatedMember }
-            : member
-        )
-      );
-
-      if (currentMember?.id === memberId) {
-        setCurrentMember(current =>
-          current ? { ...current, ...updatedMember } : null
-        );
+      if (memberId === currentMember?.id) {
+        setCurrentMember(prev => prev ? { ...prev, ...updatedMember } : prev);
       }
-    } catch (error) {
-      console.error('Update member error:', error);
-      await refetchMembers();
-      setError(error instanceof Error ? error : new Error('Failed to update member'));
-    } finally {
-      setIsSaving(false);
+    } catch (err) {
+      console.error('Failed to update member:', err);
+      setError(err as Error);
     }
   };
 
-  const clearError = () => setError(null);
-
-  // Initial fetch
   useEffect(() => {
-    if (workspaceId) {
-      refetchMembers();
-    }
-  }, [workspaceId, userId]);
+    refetchMembers();
 
-  // Subscribe to Pusher events
-  useEffect(() => {
-    if (!workspaceId) return;
-
+    // Subscribe to member updates
     const channel = pusherClient.subscribe(`workspace-${workspaceId}`);
     
-    channel.bind(EVENTS.MEMBER_UPDATE, (data: MemberUpdateEvent) => {
-      console.log('Received Pusher member update:', data);
+    channel.bind(EVENTS.MEMBER_UPDATE, (event: MemberUpdateEvent) => {
+      const { memberId, updates } = event;
       
-      setMembers(current => {
-        const newMembers = current.map(member =>
-          member.id === data.id
-            ? { ...member, ...data }
-            : member
-        );
-        console.log('Updated members from Pusher:', newMembers.map(m => ({
-          id: m.id,
-          autoResponseEnabled: m.autoResponseEnabled
-        })));
-        return newMembers;
-      });
+      setMembers(prev => prev.map(member => 
+        member.id === memberId ? { ...member, ...updates } : member
+      ));
 
-      // Use callback ref to get latest currentMember value
-      setCurrentMember(current => {
-        if (current?.id === data.id) {
-          const newMember = { ...current, ...data };
-          console.log('Updated current member from Pusher:', newMember);
-          return newMember;
-        }
-        return current;
-      });
+      if (memberId === currentMember?.id) {
+        setCurrentMember(prev => prev ? { ...prev, ...updates } : prev);
+      }
     });
 
     return () => {
-      console.log('Unsubscribing from Pusher channel:', `workspace-${workspaceId}`);
       pusherClient.unsubscribe(`workspace-${workspaceId}`);
     };
-  }, [workspaceId]); // Remove currentMember from dependencies
+  }, [workspaceId, userId]);
+
+  const clearError = () => setError(null);
 
   return (
-    <WorkspaceMembersContext.Provider
-      value={{
-        members,
-        currentMember,
-        isLoading,
-        error,
-        updateMember,
-        refetchMembers,
-        clearError
-      }}
-    >
+    <WorkspaceMembersContext.Provider value={{
+      members,
+      currentMember,
+      isLoading,
+      error,
+      updateMember,
+      refetchMembers,
+      clearError
+    }}>
       {children}
     </WorkspaceMembersContext.Provider>
   );
 }
 
-export function useWorkspaceMembers() {
+export const useWorkspaceMembers = () => {
   const context = useContext(WorkspaceMembersContext);
   if (!context) {
     throw new Error('useWorkspaceMembers must be used within a WorkspaceMembersProvider');
   }
   return context;
-} 
+}; 

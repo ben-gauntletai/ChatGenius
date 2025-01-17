@@ -47,7 +47,7 @@ export default function UserProfile({ workspaceId, onSignOut }: UserProfileProps
         >
           <div className="relative">
             <div className="w-10 h-10 relative rounded-sm overflow-hidden">
-              {currentMember.hasCustomImage && currentMember.userImage ? (
+              {currentMember.userImage ? (
                 <div className="w-full h-full relative">
                   <img
                     src={currentMember.userImage}
@@ -90,11 +90,11 @@ export default function UserProfile({ workspaceId, onSignOut }: UserProfileProps
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
           initialProfile={{
-            name: currentMember.userName || '',
-            image: currentMember.userImage || null,
-            autoResponseEnabled: currentMember.autoResponseEnabled || false,
-            voiceResponseEnabled: currentMember.voiceResponseEnabled || false,
-            selectedVoiceId: currentMember.selectedVoiceId || null
+            name: currentMember.userName,
+            image: currentMember.userImage,
+            autoResponseEnabled: currentMember.autoResponseEnabled,
+            voiceResponseEnabled: false,
+            selectedVoiceId: null
           }}
         />
       )}
