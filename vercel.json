@@ -1,0 +1,9 @@
+{
+    "functions": {
+      "api/generate.js": {
+        "runtime": "edge", 
+        "maxDuration": 60  
+      }
+    }
+  }
+  
