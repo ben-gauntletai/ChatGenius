@@ -9,6 +9,14 @@ import type { WorkspaceMember } from '@prisma/client'
 type ExtendedWorkspaceMember = WorkspaceMember & {
   autoResponseEnabled: boolean;
   voiceResponseEnabled: boolean;
+  selectedVoiceId: string | null;
+};
+
+type SenderType = { userName: string | null; userImage: string | null; };
+
+// Helper function to clean text for voice generation
+const cleanTextForVoice = (text: string) => {
+  return text.replace(/[^a-zA-Z0-9\s.,?!]/g, ' ').replace(/\s+/g, ' ').trim();
 };
 
 export async function POST(req: Request) {
@@ -43,15 +51,19 @@ export async function POST(req: Request) {
         }
       }),
       prisma.workspaceMember.findFirst({
-        where: { userId: receiverId, workspaceId },
-        select: {
-          userName: true,
-          userImage: true
-        }
+        where: { userId: receiverId, workspaceId }
       })
-    ]);
+    ]) as [SenderType | null, ExtendedWorkspaceMember | null];
 
-    console.log('[DIRECT_MESSAGES_POST] Found members:', { sender, receiver });
+    console.log('[DIRECT_MESSAGES_POST] Found members:', { 
+      sender, 
+      receiver,
+      receiverSettings: receiver ? {
+        autoResponseEnabled: receiver.autoResponseEnabled,
+        voiceResponseEnabled: receiver.voiceResponseEnabled,
+        selectedVoiceId: receiver.selectedVoiceId
+      } : null
+    });
 
     if (!receiver) {
       console.error('[DIRECT_MESSAGES_POST] Receiver not found:', { receiverId, workspaceId });
@@ -133,13 +145,8 @@ export async function POST(req: Request) {
       }
     })();
 
-    // Check if receiver has auto-response enabled and handle asynchronously
-    const receiverMember = (await prisma.workspaceMember.findFirst({
-      where: { 
-        userId: receiverId,
-        workspaceId 
-      }
-    })) as ExtendedWorkspaceMember | null;
+    // Use receiver directly since it's already typed as ExtendedWorkspaceMember
+    const receiverMember = receiver;
 
     if (receiverMember?.autoResponseEnabled) {
       // Handle auto-response asynchronously
@@ -149,7 +156,8 @@ export async function POST(req: Request) {
             receiverId,
             workspaceId,
             messageContent: content,
-            voiceEnabled: receiverMember.voiceResponseEnabled
+            voiceEnabled: receiverMember.voiceResponseEnabled,
+            selectedVoiceId: receiverMember.selectedVoiceId
           });
           
           // Get base URL from request headers or environment
@@ -198,22 +206,39 @@ export async function POST(req: Request) {
 
           // Generate voice response if enabled
           let voiceUrl = null;
-          if (receiverMember.voiceResponseEnabled) {
+          if (receiverMember.voiceResponseEnabled && receiverMember.selectedVoiceId) {
             try {
+              const cleanedText = cleanTextForVoice(responseData.response);
               const voiceResponse = await fetch(`${baseUrl}/api/generate-voice`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
-                  text: responseData.response
+                  text: cleanedText,
+                  voiceId: receiverMember.selectedVoiceId
                 })
               });
 
-              if (voiceResponse.ok) {
-                const voiceData = await voiceResponse.json();
-                // Create a data URL for the audio
-                voiceUrl = `data:audio/mp3;base64,${voiceData.audio}`;
-              } else {
+              if (!voiceResponse.ok) {
                 console.error('[DIRECT_MESSAGES_POST] Voice generation failed:', await voiceResponse.text());
+                return;
+              }
+
+              const voiceData = await voiceResponse.json();
+              
+              if (voiceData.audio) {
+                const fileUpload = await prisma.fileUpload.create({
+                  data: {
+                    fileName: 'voice-response.mp3',
+                    fileType: 'audio/mp3',
+                    data: voiceData.audio
+                  }
+                });
+
+                voiceUrl = `/api/files/${fileUpload.id}`;
+              } else {
+                console.error('[DIRECT_MESSAGES_POST] Voice data missing audio:', voiceData);
               }
             } catch (error) {
               console.error('[DIRECT_MESSAGES_POST] Voice generation error:', error);
@@ -243,17 +268,12 @@ export async function POST(req: Request) {
               receiverImage: sender.userImage?.startsWith('/api/files/') ? sender.userImage : null,
               fileUrl: voiceUrl,
               fileType: voiceUrl ? 'audio/mp3' : null,
-              fileName: voiceUrl ? 'voice-response.mp3' : null
+              fileName: voiceUrl ? 'voice-response.mp3' : null,
+              isVoiceResponse: !!voiceUrl // Add flag to indicate this is a voice response
             },
             include: {
               reactions: true
             }
-          });
-
-          console.log('[DIRECT_MESSAGES_POST] Auto-response message created:', {
-            messageId: autoResponseMessage.id,
-            content: autoResponseMessage.content,
-            voiceUrl: autoResponseMessage.fileUrl
           });
 
           // Format and broadcast auto-response
@@ -268,6 +288,7 @@ export async function POST(req: Request) {
             fileUrl: autoResponseMessage.fileUrl,
             fileName: autoResponseMessage.fileName,
             fileType: autoResponseMessage.fileType,
+            isVoiceResponse: autoResponseMessage.isVoiceResponse,
             isEdited: false
           };
 
@@ -337,7 +358,8 @@ export async function GET(req: Request) {
       senderImage: message.senderImage || null,
       receiverId: message.receiverId,
       receiverName: message.receiverName || 'User',
-      receiverImage: message.receiverImage || null
+      receiverImage: message.receiverImage || null,
+      isVoiceResponse: message.isVoiceResponse
     }));
 
     return NextResponse.json(formattedMessages);

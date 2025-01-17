@@ -27,4 +27,5 @@ export interface Message {
     lastReply?: Message;
   };
   conversationId?: boolean;
+  isVoiceResponse?: boolean;
 } 

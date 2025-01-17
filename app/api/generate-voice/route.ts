@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
     const { text, voiceId } = await req.json();
-
-    if (!userId) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
 
     if (!process.env.ELEVENLABS_API_KEY) {
       return new NextResponse('ElevenLabs API key not configured', { status: 500 });

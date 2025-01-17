@@ -23,13 +23,13 @@ enum UserStatus {
 }
 
 model Workspace {
-  id            String          @id @default(uuid())
+  id            String          @id @default(cuid())
   name          String
-  imageUrl      String
+  imageUrl      String?
   inviteCode    String         @unique
-  members       WorkspaceMember[]
   channels      Channel[]
-  messages      Message[]      @relation("WorkspaceToMessage")
+  members       WorkspaceMember[]
+  messages      Message[]       @relation("WorkspaceToMessage")
   directMessages DirectMessage[] @relation("WorkspaceToDirectMessage")
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
@@ -105,22 +105,23 @@ model Message {
 }
 
 model DirectMessage {
-  id            String    @id @default(cuid())
-  content       String
-  fileUrl       String?
-  fileName      String?
-  fileType      String?
-  workspaceId   String
-  workspace     Workspace @relation("WorkspaceToDirectMessage", fields: [workspaceId], references: [id], onDelete: Cascade)
-  senderId      String
-  senderName    String
-  senderImage   String?
-  receiverId    String
-  receiverName  String
-  receiverImage String?
-  reactions     Reaction[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String      @id @default(cuid())
+  content         String
+  fileUrl         String?
+  fileName        String?
+  fileType        String?
+  isVoiceResponse Boolean     @default(false)
+  workspaceId     String
+  senderId        String
+  senderName      String
+  senderImage     String?
+  receiverId      String
+  receiverName    String
+  receiverImage   String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  reactions       Reaction[]
+  workspace       Workspace   @relation("WorkspaceToDirectMessage", fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([senderId])
@@ -174,10 +175,11 @@ model User {
 }
 
 model FileUpload {
-  id        String   @id @default(cuid())
-  fileName  String
-  fileType  String
-  data      String   @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(cuid())
+  fileName        String
+  fileType        String
+  data            String    @db.Text
+  isVoiceResponse Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 } 
