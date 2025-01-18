@@ -5,11 +5,16 @@ process.setMaxListeners(20)
 
 // Connection queue implementation
 class ConnectionQueue {
-  private queue: Array<() => Promise<void>> = []
+  private queue: Array<{
+    operation: () => Promise<any>;
+    priority: number;
+    timestamp: number;
+  }> = []
   private processing = false
   private static instance: ConnectionQueue
-  private timeout: number = process.env.NODE_ENV === 'production' ? 15000 : 30000 // 15s for prod, 30s for dev
+  private timeout: number = process.env.NODE_ENV === 'production' ? 15000 : 30000
   private maxQueueSize: number = process.env.NODE_ENV === 'production' ? 100 : 200
+  private maxConcurrent: number = 3 // Max concurrent operations
 
   static getInstance() {
     if (!ConnectionQueue.instance) {
@@ -18,15 +23,24 @@ class ConnectionQueue {
     return ConnectionQueue.instance
   }
 
-  async add<T>(operation: () => Promise<T>): Promise<T> {
-    // Reject if queue is too large
+  async add<T>(operation: () => Promise<T>, priority: number = 0): Promise<T> {
     if (this.queue.length >= this.maxQueueSize) {
-      throw new Error('Connection queue is full')
+      // Remove oldest low-priority items if queue is full
+      const oldestLowPriority = this.queue
+        .filter(item => item.priority <= priority)
+        .sort((a, b) => a.timestamp - b.timestamp)[0]
+      
+      if (oldestLowPriority) {
+        const index = this.queue.indexOf(oldestLowPriority)
+        this.queue.splice(index, 1)
+      } else {
+        throw new Error('Connection queue is full')
+      }
     }
 
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        const index = this.queue.findIndex(op => op === queuedOperation)
+        const index = this.queue.findIndex(item => item.operation === queuedOperation)
         if (index !== -1) {
           this.queue.splice(index, 1)
           reject(new Error('Operation timed out in queue'))
@@ -49,7 +63,17 @@ class ConnectionQueue {
         }
       }
 
-      this.queue.push(queuedOperation)
+      this.queue.push({
+        operation: queuedOperation,
+        priority,
+        timestamp: Date.now()
+      })
+
+      // Sort queue by priority (higher first) and timestamp
+      this.queue.sort((a, b) => 
+        b.priority - a.priority || a.timestamp - b.timestamp
+      )
+
       if (!this.processing) {
         this.process().catch(console.error)
       }
@@ -62,36 +86,41 @@ class ConnectionQueue {
     
     try {
       while (this.queue.length > 0) {
-        const operation = this.queue.shift()
-        if (operation) {
-          try {
-            await operation()
-          } catch (error: any) {
-            if (error?.message !== 'Operation timed out in queue') {
-              console.error('Queue operation failed:', error)
+        // Process up to maxConcurrent operations
+        const batch = this.queue.splice(0, this.maxConcurrent)
+        await Promise.all(
+          batch.map(async ({ operation }) => {
+            try {
+              await operation()
+            } catch (error: any) {
+              if (error?.message !== 'Operation timed out in queue') {
+                console.error('Queue operation failed:', error)
+              }
             }
-          }
-          // Shorter delay in production
+          })
+        )
+
+        // Small delay between batches
+        if (this.queue.length > 0) {
           await new Promise(resolve => 
-            setTimeout(resolve, process.env.NODE_ENV === 'production' ? 10 : 100)
+            setTimeout(resolve, process.env.NODE_ENV === 'production' ? 50 : 100)
           )
         }
       }
     } finally {
       this.processing = false
-      // Check for new items that might have been added while processing
       if (this.queue.length > 0) {
         this.process().catch(console.error)
       }
     }
   }
 
-  // Add method to check queue health
   getQueueStats() {
     return {
       queueLength: this.queue.length,
       isProcessing: this.processing,
-      maxSize: this.maxQueueSize
+      maxSize: this.maxQueueSize,
+      maxConcurrent: this.maxConcurrent
     }
   }
 }
@@ -125,6 +154,14 @@ const prismaClientSingleton = () => {
           let lastError: any
           
           const attemptQuery = async () => {
+            // Determine query priority based on operation type
+            const isPriority = 
+              model.toLowerCase().includes('user') || 
+              model.toLowerCase().includes('member') ||
+              model.toLowerCase().includes('workspace') ||
+              operation.toLowerCase().includes('find') ||
+              operation.toLowerCase().includes('count')
+
             return connectionQueue.add(async () => {
               try {
                 return await query(args)
@@ -148,20 +185,19 @@ const prismaClientSingleton = () => {
                 console.warn(
                   `Database connection error (attempt ${retries + 1}/${MAX_RETRIES}):`, 
                   error.message,
-                  `Queue stats: ${JSON.stringify(stats)}`
+                  `Queue stats: ${JSON.stringify(stats)}`,
+                  `Model: ${model}, Operation: ${operation}`
                 )
                 
                 // Try to recover the connection
                 try {
                   await prismaInstance.$disconnect()
-                  // Shorter delay in production
                   await new Promise(resolve => 
                     setTimeout(resolve, process.env.NODE_ENV === 'production' ? 200 : 1000)
                   )
                   await prismaInstance.$connect()
                 } catch (reconnectError) {
                   console.error('Failed to reconnect:', reconnectError)
-                  // Create a new instance if reconnection fails
                   try {
                     await prismaInstance.$disconnect().catch(() => {})
                     prismaInstance = prismaClientSingleton()
@@ -172,9 +208,9 @@ const prismaClientSingleton = () => {
                   }
                 }
                 
-                throw error // Let the retry loop handle it
+                throw error
               }
-            })
+            }, isPriority ? 1 : 0) // Higher priority for important operations
           }
           
           while (retries < MAX_RETRIES) {
