@@ -21,38 +21,48 @@ const prismaClientSingleton = () => {
           args: unknown; 
           query: (args: unknown) => Promise<T>;
         }): Promise<T> {
-          const MAX_RETRIES = 3
+          const MAX_RETRIES = 5
           let retries = 0
+          let lastError: any
           
           while (retries < MAX_RETRIES) {
             try {
+              // Add small delay between retries to prevent overwhelming the connection pool
+              if (retries > 0) {
+                await new Promise(resolve => setTimeout(resolve, Math.min(100 * Math.pow(2, retries), 2000)))
+              }
+              
               return await query(args)
             } catch (error: any) {
-              if (
+              lastError = error
+              const isConnectionError = 
                 error?.message?.includes('Connection pool timeout') ||
                 error?.message?.includes('Max connections reached') ||
                 error?.message?.includes('socket closed') ||
-                error?.message?.includes('Connection terminated')
-              ) {
-                await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retries)))
+                error?.message?.includes('Connection terminated') ||
+                error?.message?.includes('Client has been closed')
+              
+              if (isConnectionError) {
                 retries++
+                console.warn(`Database connection error (attempt ${retries}/${MAX_RETRIES}):`, error.message)
                 
-                // Force a new connection
                 try {
                   await prisma.$disconnect()
-                  await new Promise(resolve => setTimeout(resolve, 100))
+                  // Longer delay for connection issues
+                  await new Promise(resolve => setTimeout(resolve, 500))
                   await prisma.$connect()
                 } catch (reconnectError) {
                   console.error('Reconnection failed:', reconnectError)
                 }
                 
-                if (retries === MAX_RETRIES) throw error
                 continue
               }
               throw error
             }
           }
-          throw new Error('Max retries reached')
+          
+          console.error('All retry attempts failed. Last error:', lastError)
+          throw lastError
         },
       },
     },
@@ -69,7 +79,7 @@ const globalForPrisma = global as { prisma?: ExtendedPrismaClient }
 
 // Clean up existing connection
 if (globalForPrisma.prisma) {
-  globalForPrisma.prisma.$disconnect()
+  globalForPrisma.prisma.$disconnect().catch(console.error)
 }
 
 export const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
@@ -85,6 +95,10 @@ const cleanup = async () => {
   }
 }
 
+// Handle all possible termination scenarios
 process.on('beforeExit', cleanup)
 process.on('SIGTERM', cleanup)
 process.on('SIGINT', cleanup)
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason)
+})
