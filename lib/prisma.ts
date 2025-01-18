@@ -1,6 +1,55 @@
 import { PrismaClient } from '@prisma/client'
 
+// Connection queue implementation
+class ConnectionQueue {
+  private queue: Array<() => Promise<void>> = []
+  private processing = false
+  private static instance: ConnectionQueue
+
+  static getInstance() {
+    if (!ConnectionQueue.instance) {
+      ConnectionQueue.instance = new ConnectionQueue()
+    }
+    return ConnectionQueue.instance
+  }
+
+  async add<T>(operation: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.queue.push(async () => {
+        try {
+          const result = await operation()
+          resolve(result)
+        } catch (error) {
+          reject(error)
+        }
+      })
+      this.process()
+    })
+  }
+
+  private async process() {
+    if (this.processing || this.queue.length === 0) return
+    this.processing = true
+    
+    while (this.queue.length > 0) {
+      const operation = this.queue.shift()
+      if (operation) {
+        try {
+          await operation()
+        } catch (error) {
+          console.error('Queue operation failed:', error)
+        }
+        // Add small delay between operations
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+    }
+    
+    this.processing = false
+  }
+}
+
 let prismaInstance: ExtendedPrismaClient | null = null
+const connectionQueue = ConnectionQueue.getInstance()
 
 const prismaClientSingleton = () => {
   return new PrismaClient({
@@ -28,43 +77,45 @@ const prismaClientSingleton = () => {
           let lastError: any
           
           const attemptQuery = async () => {
-            try {
-              return await query(args)
-            } catch (error: any) {
-              if (!prismaInstance) throw error
-              
-              const isConnectionError = 
-                error?.message?.includes('Connection pool timeout') ||
-                error?.message?.includes('Max connections reached') ||
-                error?.message?.includes('socket closed') ||
-                error?.message?.includes('Connection terminated') ||
-                error?.message?.includes('Client has been closed') ||
-                error?.message?.includes('Can\'t reach database server')
-              
-              if (!isConnectionError) throw error
-              
-              console.warn(`Database connection error (attempt ${retries + 1}/${MAX_RETRIES}):`, error.message)
-              
-              // Try to recover the connection
+            return connectionQueue.add(async () => {
               try {
-                await prismaInstance.$disconnect()
-                await new Promise(resolve => setTimeout(resolve, 1000))
-                await prismaInstance.$connect()
-              } catch (reconnectError) {
-                console.error('Failed to reconnect:', reconnectError)
-                // Create a new instance if reconnection fails
+                return await query(args)
+              } catch (error: any) {
+                if (!prismaInstance) throw error
+                
+                const isConnectionError = 
+                  error?.message?.includes('Connection pool timeout') ||
+                  error?.message?.includes('Max connections reached') ||
+                  error?.message?.includes('socket closed') ||
+                  error?.message?.includes('Connection terminated') ||
+                  error?.message?.includes('Client has been closed') ||
+                  error?.message?.includes('Can\'t reach database server')
+                
+                if (!isConnectionError) throw error
+                
+                console.warn(`Database connection error (attempt ${retries + 1}/${MAX_RETRIES}):`, error.message)
+                
+                // Try to recover the connection
                 try {
-                  await prismaInstance.$disconnect().catch(() => {})
-                  prismaInstance = prismaClientSingleton()
+                  await prismaInstance.$disconnect()
+                  await new Promise(resolve => setTimeout(resolve, 1000))
                   await prismaInstance.$connect()
-                } catch (newInstanceError) {
-                  console.error('Failed to create new instance:', newInstanceError)
-                  throw error
+                } catch (reconnectError) {
+                  console.error('Failed to reconnect:', reconnectError)
+                  // Create a new instance if reconnection fails
+                  try {
+                    await prismaInstance.$disconnect().catch(() => {})
+                    prismaInstance = prismaClientSingleton()
+                    await prismaInstance.$connect()
+                  } catch (newInstanceError) {
+                    console.error('Failed to create new instance:', newInstanceError)
+                    throw error
+                  }
                 }
+                
+                throw error // Let the retry loop handle it
               }
-              
-              throw error // Let the retry loop handle it
-            }
+            })
           }
           
           while (retries < MAX_RETRIES) {
