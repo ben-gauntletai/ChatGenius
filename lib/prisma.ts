@@ -12,9 +12,9 @@ class ConnectionQueue {
   }> = []
   private processing = false
   private static instance: ConnectionQueue
-  private timeout: number = 30000 // Increase timeout to 30 seconds
-  private maxQueueSize: number = 50 // Reduce queue size to prevent overload
-  private maxConcurrent: number = 2 // Reduce concurrent operations
+  private timeout: number = 45000 // Increase timeout for higher latency
+  private maxQueueSize: number = 30 // Reduce queue size
+  private maxConcurrent: number = 3 // Adjust concurrent operations
 
   static getInstance() {
     if (!ConnectionQueue.instance) {
@@ -86,7 +86,6 @@ class ConnectionQueue {
     
     try {
       while (this.queue.length > 0) {
-        // Process fewer operations at once
         const batch = this.queue.splice(0, this.maxConcurrent)
         await Promise.all(
           batch.map(async ({ operation }) => {
@@ -94,11 +93,12 @@ class ConnectionQueue {
               await operation()
             } catch (error: any) {
               console.error('Queue operation failed:', error)
-              // Re-queue failed operations with exponential backoff
               if (error?.message?.includes('Connection') || error?.message?.includes('timeout')) {
+                // Add more aggressive backoff for connection issues
+                await new Promise(resolve => setTimeout(resolve, 500))
                 this.queue.unshift({
                   operation,
-                  priority: 2, // Increase priority for retries
+                  priority: 2,
                   timestamp: Date.now()
                 })
               }
@@ -106,9 +106,9 @@ class ConnectionQueue {
           })
         )
 
-        // Longer delay between batches
+        // Add longer delay between batches for higher latency
         if (this.queue.length > 0) {
-          await new Promise(resolve => setTimeout(resolve, 200))
+          await new Promise(resolve => setTimeout(resolve, 300))
         }
       }
     } finally {
