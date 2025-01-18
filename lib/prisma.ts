@@ -1,10 +1,15 @@
 import { PrismaClient } from '@prisma/client'
 
+// Set max listeners at the top level
+process.setMaxListeners(20)
+
 // Connection queue implementation
 class ConnectionQueue {
   private queue: Array<() => Promise<void>> = []
   private processing = false
   private static instance: ConnectionQueue
+  private timeout: number = process.env.NODE_ENV === 'production' ? 15000 : 30000 // 15s for prod, 30s for dev
+  private maxQueueSize: number = process.env.NODE_ENV === 'production' ? 100 : 200
 
   static getInstance() {
     if (!ConnectionQueue.instance) {
@@ -14,37 +19,80 @@ class ConnectionQueue {
   }
 
   async add<T>(operation: () => Promise<T>): Promise<T> {
+    // Reject if queue is too large
+    if (this.queue.length >= this.maxQueueSize) {
+      throw new Error('Connection queue is full')
+    }
+
     return new Promise((resolve, reject) => {
-      this.queue.push(async () => {
+      const timeoutId = setTimeout(() => {
+        const index = this.queue.findIndex(op => op === queuedOperation)
+        if (index !== -1) {
+          this.queue.splice(index, 1)
+          reject(new Error('Operation timed out in queue'))
+        }
+      }, this.timeout)
+
+      const queuedOperation = async () => {
         try {
-          const result = await operation()
+          const result = await Promise.race<T>([
+            operation(),
+            new Promise<T>((_, reject) => 
+              setTimeout(() => reject(new Error('Query timeout')), this.timeout)
+            )
+          ])
+          clearTimeout(timeoutId)
           resolve(result)
         } catch (error) {
+          clearTimeout(timeoutId)
           reject(error)
         }
-      })
-      this.process()
+      }
+
+      this.queue.push(queuedOperation)
+      if (!this.processing) {
+        this.process().catch(console.error)
+      }
     })
   }
 
   private async process() {
-    if (this.processing || this.queue.length === 0) return
+    if (this.processing) return
     this.processing = true
     
-    while (this.queue.length > 0) {
-      const operation = this.queue.shift()
-      if (operation) {
-        try {
-          await operation()
-        } catch (error) {
-          console.error('Queue operation failed:', error)
+    try {
+      while (this.queue.length > 0) {
+        const operation = this.queue.shift()
+        if (operation) {
+          try {
+            await operation()
+          } catch (error: any) {
+            if (error?.message !== 'Operation timed out in queue') {
+              console.error('Queue operation failed:', error)
+            }
+          }
+          // Shorter delay in production
+          await new Promise(resolve => 
+            setTimeout(resolve, process.env.NODE_ENV === 'production' ? 10 : 100)
+          )
         }
-        // Add small delay between operations
-        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+    } finally {
+      this.processing = false
+      // Check for new items that might have been added while processing
+      if (this.queue.length > 0) {
+        this.process().catch(console.error)
       }
     }
-    
-    this.processing = false
+  }
+
+  // Add method to check queue health
+  getQueueStats() {
+    return {
+      queueLength: this.queue.length,
+      isProcessing: this.processing,
+      maxSize: this.maxQueueSize
+    }
   }
 }
 
@@ -72,7 +120,7 @@ const prismaClientSingleton = () => {
           args: unknown; 
           query: (args: unknown) => Promise<T>;
         }): Promise<T> {
-          const MAX_RETRIES = 3
+          const MAX_RETRIES = process.env.NODE_ENV === 'production' ? 4 : 5
           let retries = 0
           let lastError: any
           
@@ -89,16 +137,27 @@ const prismaClientSingleton = () => {
                   error?.message?.includes('socket closed') ||
                   error?.message?.includes('Connection terminated') ||
                   error?.message?.includes('Client has been closed') ||
-                  error?.message?.includes('Can\'t reach database server')
+                  error?.message?.includes('Can\'t reach database server') ||
+                  error?.message?.includes('Query timeout') ||
+                  error?.message?.includes('Operation timed out') ||
+                  error?.message?.includes('Connection queue is full')
                 
                 if (!isConnectionError) throw error
                 
-                console.warn(`Database connection error (attempt ${retries + 1}/${MAX_RETRIES}):`, error.message)
+                const stats = connectionQueue.getQueueStats()
+                console.warn(
+                  `Database connection error (attempt ${retries + 1}/${MAX_RETRIES}):`, 
+                  error.message,
+                  `Queue stats: ${JSON.stringify(stats)}`
+                )
                 
                 // Try to recover the connection
                 try {
                   await prismaInstance.$disconnect()
-                  await new Promise(resolve => setTimeout(resolve, 1000))
+                  // Shorter delay in production
+                  await new Promise(resolve => 
+                    setTimeout(resolve, process.env.NODE_ENV === 'production' ? 200 : 1000)
+                  )
                   await prismaInstance.$connect()
                 } catch (reconnectError) {
                   console.error('Failed to reconnect:', reconnectError)
@@ -121,9 +180,11 @@ const prismaClientSingleton = () => {
           while (retries < MAX_RETRIES) {
             try {
               if (retries > 0) {
-                await new Promise(resolve => 
-                  setTimeout(resolve, Math.min(1000 * Math.pow(2, retries), 5000))
-                )
+                // Shorter delays in production
+                const delay = process.env.NODE_ENV === 'production'
+                  ? Math.min(200 * Math.pow(2, retries), 1000)
+                  : Math.min(1000 * Math.pow(2, retries), 5000)
+                await new Promise(resolve => setTimeout(resolve, delay))
               }
               return await attemptQuery()
             } catch (error) {
@@ -172,9 +233,21 @@ const cleanup = async () => {
 }
 
 // Handle all possible termination scenarios
-process.on('beforeExit', cleanup)
-process.on('SIGTERM', cleanup)
-process.on('SIGINT', cleanup)
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason)
-})
+const setupEventHandlers = () => {
+  const handlers = ['beforeExit', 'SIGTERM', 'SIGINT']
+  handlers.forEach(event => {
+    // Remove any existing listeners
+    process.removeAllListeners(event)
+    // Add our cleanup handler
+    process.on(event, cleanup)
+  })
+
+  // Remove existing unhandledRejection listeners
+  process.removeAllListeners('unhandledRejection')
+  // Add single unhandledRejection handler
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled Rejection:', reason)
+  })
+}
+
+setupEventHandlers()
