@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { prisma } from '@/lib/prisma';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -24,7 +25,30 @@ export async function POST(req: Request) {
       response_format: "url",
     });
 
-    return NextResponse.json({ imageUrl: response.data[0].url });
+    const imageUrl = response.data[0].url;
+    if (!imageUrl) {
+      throw new Error('No image URL received from OpenAI');
+    }
+
+    // Download the image
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error('Failed to download image from OpenAI');
+    }
+
+    const imageBuffer = await imageResponse.arrayBuffer();
+    const base64Data = Buffer.from(imageBuffer).toString('base64');
+
+    // Store in database
+    const fileUpload = await prisma.fileUpload.create({
+      data: {
+        fileName: 'ai-generated-profile.png',
+        fileType: 'image/png',
+        data: base64Data
+      }
+    });
+
+    return NextResponse.json({ imageUrl: `/api/files/${fileUpload.id}` });
   } catch (error) {
     console.error('Error generating image:', error);
     return NextResponse.json(
