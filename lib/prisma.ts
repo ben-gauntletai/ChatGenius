@@ -1,25 +1,63 @@
 import { PrismaClient } from '@prisma/client'
 
-declare global {
-  var prisma: PrismaClient | undefined
-}
-
 const prismaClientSingleton = () => {
   return new PrismaClient({
     datasources: {
       db: {
-        url: process.env.NODE_ENV === 'production'
-          ? process.env.DATABASE_URL  // Use pooling in production
-          : process.env.DIRECT_URL    // Use direct connection in development
-      }
+        url: process.env.DATABASE_URL
+      },
     },
-    // Add logging in development
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : []
+  }).$extends({
+    model: {
+      $allModels: {
+        async $allOperations<T>({ 
+          model, 
+          operation, 
+          args, 
+          query 
+        }: { 
+          model: string; 
+          operation: string; 
+          args: unknown; 
+          query: (args: unknown) => Promise<T>;
+        }): Promise<T> {
+          const MAX_RETRIES = 3
+          let retries = 0
+          
+          while (retries < MAX_RETRIES) {
+            try {
+              return await query(args)
+            } catch (error: any) {
+              if (
+                error?.message?.includes('Connection pool timeout') ||
+                error?.message?.includes('Max connections reached')
+              ) {
+                await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retries)))
+                retries++
+                if (retries === MAX_RETRIES) throw error
+                continue
+              }
+              throw error
+            }
+          }
+          throw new Error('Max retries reached')
+        },
+      },
+    },
   })
 }
 
-const prisma = globalThis.prisma ?? prismaClientSingleton()
+type ExtendedPrismaClient = ReturnType<typeof prismaClientSingleton>
 
-if (process.env.NODE_ENV !== 'production') globalThis.prisma = prisma
+declare global {
+  var prisma: ExtendedPrismaClient | undefined
+}
 
-export { prisma }
+const globalForPrisma = global as { prisma?: ExtendedPrismaClient }
+export const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+
+process.on('beforeExit', async () => {
+  await prisma.$disconnect()
+})
