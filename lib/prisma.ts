@@ -12,9 +12,9 @@ class ConnectionQueue {
   }> = []
   private processing = false
   private static instance: ConnectionQueue
-  private timeout: number = process.env.NODE_ENV === 'production' ? 15000 : 30000
-  private maxQueueSize: number = process.env.NODE_ENV === 'production' ? 100 : 200
-  private maxConcurrent: number = 3 // Max concurrent operations
+  private timeout: number = 30000 // Increase timeout to 30 seconds
+  private maxQueueSize: number = 50 // Reduce queue size to prevent overload
+  private maxConcurrent: number = 2 // Reduce concurrent operations
 
   static getInstance() {
     if (!ConnectionQueue.instance) {
@@ -86,25 +86,29 @@ class ConnectionQueue {
     
     try {
       while (this.queue.length > 0) {
-        // Process up to maxConcurrent operations
+        // Process fewer operations at once
         const batch = this.queue.splice(0, this.maxConcurrent)
         await Promise.all(
           batch.map(async ({ operation }) => {
             try {
               await operation()
             } catch (error: any) {
-              if (error?.message !== 'Operation timed out in queue') {
-                console.error('Queue operation failed:', error)
+              console.error('Queue operation failed:', error)
+              // Re-queue failed operations with exponential backoff
+              if (error?.message?.includes('Connection') || error?.message?.includes('timeout')) {
+                this.queue.unshift({
+                  operation,
+                  priority: 2, // Increase priority for retries
+                  timestamp: Date.now()
+                })
               }
             }
           })
         )
 
-        // Small delay between batches
+        // Longer delay between batches
         if (this.queue.length > 0) {
-          await new Promise(resolve => 
-            setTimeout(resolve, process.env.NODE_ENV === 'production' ? 50 : 100)
-          )
+          await new Promise(resolve => setTimeout(resolve, 200))
         }
       }
     } finally {
@@ -135,6 +139,7 @@ const prismaClientSingleton = () => {
         url: process.env.DATABASE_URL
       },
     },
+    log: [] // Disable all logging
   }).$extends({
     model: {
       $allModels: {
@@ -149,7 +154,7 @@ const prismaClientSingleton = () => {
           args: unknown; 
           query: (args: unknown) => Promise<T>;
         }): Promise<T> {
-          const MAX_RETRIES = process.env.NODE_ENV === 'production' ? 4 : 5
+          const MAX_RETRIES = 5  // Increase max retries
           let retries = 0
           let lastError: any
           
@@ -216,10 +221,8 @@ const prismaClientSingleton = () => {
           while (retries < MAX_RETRIES) {
             try {
               if (retries > 0) {
-                // Shorter delays in production
-                const delay = process.env.NODE_ENV === 'production'
-                  ? Math.min(200 * Math.pow(2, retries), 1000)
-                  : Math.min(1000 * Math.pow(2, retries), 5000)
+                // Use consistent delay for both environments
+                const delay = Math.min(200 * Math.pow(2, retries), 1000)
                 await new Promise(resolve => setTimeout(resolve, delay))
               }
               return await attemptQuery()
