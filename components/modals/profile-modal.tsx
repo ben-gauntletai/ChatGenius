@@ -83,31 +83,47 @@ export default function ProfileModal({
       
       if (!currentMember) return;
 
-      console.log('Saving profile with state:', {
+      // If there's an uploaded image, verify it's accessible
+      if (uploadedImage) {
+        try {
+          await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = uploadedImage;
+          });
+        } catch (error) {
+          console.error('Error verifying image accessibility:', error);
+          // If image verification fails, don't update the image
+          setUploadedImage(null);
+        }
+      }
+
+      const updates = {
         userName: userName.trim() || 'User',
         status,
-        userImage: uploadedImage || currentMember.userImage,
-        hasCustomImage: !!uploadedImage || currentMember.hasCustomImage,
         autoResponseEnabled: profile.autoResponseEnabled,
         voiceResponseEnabled: profile.voiceResponseEnabled,
         selectedVoiceId: profile.selectedVoiceId
-      });
+      };
+
+      // Only include image updates if we have a valid image
+      if (uploadedImage || currentMember.userImage) {
+        Object.assign(updates, {
+          userImage: uploadedImage || currentMember.userImage,
+          hasCustomImage: !!uploadedImage || currentMember.hasCustomImage
+        });
+      }
+
+      console.log('Saving profile with state:', updates);
 
       // Save all changes
-      await updateMember(currentMember.id, {
-        userName: userName.trim() || 'User',
-        status,
-        userImage: uploadedImage || currentMember.userImage,
-        hasCustomImage: !!uploadedImage || currentMember.hasCustomImage,
-        autoResponseEnabled: profile.autoResponseEnabled,
-        voiceResponseEnabled: profile.voiceResponseEnabled,
-        selectedVoiceId: profile.selectedVoiceId
-      });
+      await updateMember(currentMember.id, updates);
 
       // Force a refresh of the workspace members context
       if (uploadedImage) {
-        // Small delay to ensure the update has propagated
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Longer delay to ensure the update has propagated
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       console.log('Profile saved successfully');
@@ -146,6 +162,14 @@ export default function ProfileModal({
     try {
       setIsLoading(true);
       
+      // Wait for the image to be fully loaded before proceeding
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = imageUrl;
+      });
+      
       // Immediately update the uploaded image
       setUploadedImage(imageUrl);
       
@@ -155,6 +179,9 @@ export default function ProfileModal({
           userImage: imageUrl,
           hasCustomImage: true
         });
+
+        // Force a refresh of the workspace members context
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     } catch (error) {
       console.error('Error setting generated image:', error);
