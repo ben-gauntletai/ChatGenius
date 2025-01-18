@@ -34,6 +34,11 @@ const prismaClientSingleton = () => {
               ) {
                 await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retries)))
                 retries++
+                
+                try {
+                  await prisma.$disconnect()
+                } catch {}
+                
                 if (retries === MAX_RETRIES) throw error
                 continue
               }
@@ -54,10 +59,15 @@ declare global {
 }
 
 const globalForPrisma = global as { prisma?: ExtendedPrismaClient }
+
+if (globalForPrisma.prisma) {
+  globalForPrisma.prisma.$disconnect()
+}
+
 export const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-process.on('beforeExit', async () => {
-  await prisma.$disconnect()
-})
+process.on('beforeExit', async () => await prisma.$disconnect())
+process.on('SIGTERM', async () => await prisma.$disconnect())
+process.on('SIGINT', async () => await prisma.$disconnect())
