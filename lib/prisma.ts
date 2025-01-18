@@ -30,14 +30,21 @@ const prismaClientSingleton = () => {
             } catch (error: any) {
               if (
                 error?.message?.includes('Connection pool timeout') ||
-                error?.message?.includes('Max connections reached')
+                error?.message?.includes('Max connections reached') ||
+                error?.message?.includes('socket closed') ||
+                error?.message?.includes('Connection terminated')
               ) {
                 await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retries)))
                 retries++
                 
+                // Force a new connection
                 try {
                   await prisma.$disconnect()
-                } catch {}
+                  await new Promise(resolve => setTimeout(resolve, 100))
+                  await prisma.$connect()
+                } catch (reconnectError) {
+                  console.error('Reconnection failed:', reconnectError)
+                }
                 
                 if (retries === MAX_RETRIES) throw error
                 continue
@@ -60,6 +67,7 @@ declare global {
 
 const globalForPrisma = global as { prisma?: ExtendedPrismaClient }
 
+// Clean up existing connection
 if (globalForPrisma.prisma) {
   globalForPrisma.prisma.$disconnect()
 }
@@ -68,6 +76,15 @@ export const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-process.on('beforeExit', async () => await prisma.$disconnect())
-process.on('SIGTERM', async () => await prisma.$disconnect())
-process.on('SIGINT', async () => await prisma.$disconnect())
+// Enhanced cleanup
+const cleanup = async () => {
+  try {
+    await prisma.$disconnect()
+  } catch (e) {
+    console.error('Error during cleanup:', e)
+  }
+}
+
+process.on('beforeExit', cleanup)
+process.on('SIGTERM', cleanup)
+process.on('SIGINT', cleanup)
