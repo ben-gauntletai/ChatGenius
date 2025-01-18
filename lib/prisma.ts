@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 
+let prismaInstance: ExtendedPrismaClient | null = null
+
 const prismaClientSingleton = () => {
   return new PrismaClient({
     datasources: {
@@ -21,43 +23,62 @@ const prismaClientSingleton = () => {
           args: unknown; 
           query: (args: unknown) => Promise<T>;
         }): Promise<T> {
-          const MAX_RETRIES = 5
+          const MAX_RETRIES = 3
           let retries = 0
           let lastError: any
           
-          while (retries < MAX_RETRIES) {
+          const attemptQuery = async () => {
             try {
-              // Add small delay between retries to prevent overwhelming the connection pool
-              if (retries > 0) {
-                await new Promise(resolve => setTimeout(resolve, Math.min(100 * Math.pow(2, retries), 2000)))
-              }
-              
               return await query(args)
             } catch (error: any) {
-              lastError = error
+              if (!prismaInstance) throw error
+              
               const isConnectionError = 
                 error?.message?.includes('Connection pool timeout') ||
                 error?.message?.includes('Max connections reached') ||
                 error?.message?.includes('socket closed') ||
                 error?.message?.includes('Connection terminated') ||
-                error?.message?.includes('Client has been closed')
+                error?.message?.includes('Client has been closed') ||
+                error?.message?.includes('Can\'t reach database server')
               
-              if (isConnectionError) {
-                retries++
-                console.warn(`Database connection error (attempt ${retries}/${MAX_RETRIES}):`, error.message)
-                
+              if (!isConnectionError) throw error
+              
+              console.warn(`Database connection error (attempt ${retries + 1}/${MAX_RETRIES}):`, error.message)
+              
+              // Try to recover the connection
+              try {
+                await prismaInstance.$disconnect()
+                await new Promise(resolve => setTimeout(resolve, 1000))
+                await prismaInstance.$connect()
+              } catch (reconnectError) {
+                console.error('Failed to reconnect:', reconnectError)
+                // Create a new instance if reconnection fails
                 try {
-                  await prisma.$disconnect()
-                  // Longer delay for connection issues
-                  await new Promise(resolve => setTimeout(resolve, 500))
-                  await prisma.$connect()
-                } catch (reconnectError) {
-                  console.error('Reconnection failed:', reconnectError)
+                  await prismaInstance.$disconnect().catch(() => {})
+                  prismaInstance = prismaClientSingleton()
+                  await prismaInstance.$connect()
+                } catch (newInstanceError) {
+                  console.error('Failed to create new instance:', newInstanceError)
+                  throw error
                 }
-                
-                continue
               }
-              throw error
+              
+              throw error // Let the retry loop handle it
+            }
+          }
+          
+          while (retries < MAX_RETRIES) {
+            try {
+              if (retries > 0) {
+                await new Promise(resolve => 
+                  setTimeout(resolve, Math.min(1000 * Math.pow(2, retries), 5000))
+                )
+              }
+              return await attemptQuery()
+            } catch (error) {
+              lastError = error
+              retries++
+              if (retries === MAX_RETRIES) break
             }
           }
           
@@ -77,19 +98,23 @@ declare global {
 
 const globalForPrisma = global as { prisma?: ExtendedPrismaClient }
 
-// Clean up existing connection
+// Clean up any existing connection
 if (globalForPrisma.prisma) {
   globalForPrisma.prisma.$disconnect().catch(console.error)
 }
 
-export const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
+// Initialize the singleton instance
+prismaInstance = globalForPrisma.prisma ?? prismaClientSingleton()
+export const prisma = prismaInstance
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 // Enhanced cleanup
 const cleanup = async () => {
+  if (!prismaInstance) return
+  
   try {
-    await prisma.$disconnect()
+    await prismaInstance.$disconnect()
   } catch (e) {
     console.error('Error during cleanup:', e)
   }
